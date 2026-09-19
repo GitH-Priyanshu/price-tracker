@@ -1,0 +1,188 @@
+{
+  "page": 1,
+  "pageSize": 20,
+  "pages": 50,
+  "total": 1000,
+  "items": [
+    {
+      "id": 445,
+      "slug": "domus-solar-charger-plus",
+      "name": "Domus Solar Charger Plus",
+      "brand": "Domus",
+      "category": "Power",
+      "sku": "DOM-10445",
+      "description": "The Domus Solar Charger Plus. A dependable power pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 866,
+      "slug": "basecamp-grinder-xl",
+      "name": "Basecamp Grinder XL",
+      "brand": "Basecamp",
+      "category": "Kitchen",
+      "sku": "BAS-10866",
+      "description": "The Basecamp Grinder XL. A dependable kitchen pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 221,
+      "slug": "domus-sleeve-air",
+      "name": "Domus Sleeve Air",
+      "brand": "Domus",
+      "category": "Bags",
+      "sku": "DOM-10221",
+      "description": "The Domus Sleeve Air. A dependable bags pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 140,
+      "slug": "summit-hardshell-case-mini",
+      "name": "Summit Hardshell Case Mini",
+      "brand": "Summit",
+      "category": "Bags",
+      "sku": "SUM-10140",
+      "description": "The Summit Hardshell Case Mini. A dependable bags pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 334,
+      "slug": "basecamp-creatorbook-lite",
+      "name": "Basecamp Creatorbook Lite",
+      "brand": "Basecamp",
+      "category": "Laptops",
+      "sku": "BAS-10334",
+      "description": "The Basecamp Creatorbook Lite. A dependable laptops pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 690,
+      "slug": "helix-smart-bulb-s",
+      "name": "Helix Smart Bulb S",
+      "brand": "Helix",
+      "category": "Smart Home",
+      "sku": "HEL-10690",
+      "description": "The Helix Smart Bulb S. A dependable smart home pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 799,
+      "slug": "nordkraft-sandal-x",
+      "name": "Nordkraft Sandal X",
+      "brand": "Nordkraft",
+      "category": "Footwear",
+      "sku": "NOR-10799",
+      "description": "The Nordkraft Sandal X. A dependable footwear pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 671,
+      "slug": "copperpot-curved-monitor-s",
+      "name": "Copperpot Curved Monitor S",
+      "brand": "Copperpot",
+      "category": "Monitors",
+      "sku": "COP-10671",
+      "description": "The Copperpot Curved Monitor S. A dependable monitors pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 798,
+      "slug": "summit-hiking-boot-x",
+      "name": "Summit Hiking Boot X",
+      "brand": "Summit",
+      "category": "Footwear",
+      "sku": "SUM-10798",
+      "description": "The Summit Hiking Boot X. A dependable footwear pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 476,
+      "slug": "summit-waterproof-boot-plus",
+      "name": "Summit Waterproof Boot Plus",
+      "brand": "Summit",
+      "category": "Footwear",
+      "sku": "SUM-10476",
+      "description": "The Summit Waterproof Boot Plus. A dependable footwear pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 353,
+      "slug": "larkspur-keyboard-lite",
+      "name": "Larkspur Keyboard Lite",
+      "brand": "Larkspur",
+      "category": "Peripherals",
+      "sku": "LAR-10353",
+      "description": "The Larkspur Keyboard Lite. A dependable peripherals pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 627,
+      "slug": "domus-skillet-three",
+      "name": "Domus Skillet Three",
+      "brand": "Domus",
+      "category": "Kitchen",
+      "sku": "DOM-10627",
+      "description": "The Domus Skillet Three. A dependable kitchen pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 262,
+      "slug": "amperage-sleep-tracker-max",
+      "name": "Amperage Sleep Tracker Max",
+      "brand": "Amperage",
+      "category": "Wearables",
+      "sku": "AMP-10262",
+      "description": "The Amperage Sleep Tracker Max. A dependable wearables pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 635,
+      "slug": "ironwood-recovery-slide-three",
+      "name": "Ironwood Recovery Slide Three",
+      "brand": "Ironwood",
+      "category": "Footwear",
+      "sku": "IRO-10635",
+      "description": "The Ironwood Recovery Slide Three. A dependable footwear pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 440,
+      "slug": "meridian-docking-station-plus",
+      "name": "Meridian Docking Station Plus",
+      "brand": "Meridian",
+      "category": "Peripherals",
+      "sku": "MER-10440",
+      "description": "The Meridian Docking Station Plus. A dependable peripherals pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 641,
+      "slug": "domus-headphones-s",
+      "name": "Domus Headphones S",
+      "brand": "Domus",
+      "category": "Audio",
+      "sku": "DOM-10641",
+      "description": "The Domus Headphones S. A dependable audio pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 958,
+      "slug": "meridian-hiking-boot-studio",
+      "name": "Meridian Hiking Boot Studio",
+      "brand": "Meridian",
+      "category": "Footwear",
+      "sku": "MER-10958",
+      "description": "The Meridian Hiking Boot Studio. A dependable footwear pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 179,
+      "slug": "domus-smart-ring-air",
+      "name": "Domus Smart Ring Air",
+      "brand": "Domus",
+      "category": "Wearables",
+      "sku": "DOM-10179",
+      "description": "The Domus Smart Ring Air. A dependable wearables pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 588,
+      "slug": "summit-gaming-monitor-three",
+      "name": "Summit Gaming Monitor Three",
+      "brand": "Summit",
+      "category": "Monitors",
+      "sku": "SUM-10588",
+      "description": "The Summit Gaming Monitor Three. A dependable monitors pick with a clean, no-nonsense design and the everyday features you actually use."
+    },
+    {
+      "id": 283,
+      "slug": "larkspur-charging-pad-max",
+      "name": "Larkspur Charging Pad Max",
+      "brand": "Larkspur",
+      "category": "Power",
+      "sku": "LAR-10283",
+      "description": "The Larkspur Charging Pad Max. A dependable power pick with a clean, no-nonsense design and the everyday features you actually use."
+    }
+  ]
+}

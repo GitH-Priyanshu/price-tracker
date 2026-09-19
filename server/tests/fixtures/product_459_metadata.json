@@ -1,0 +1,62 @@
+{
+  "id": 459,
+  "slug": "domus-sling-plus",
+  "name": "Domus Sling Plus",
+  "brand": "Domus",
+  "category": "Bags",
+  "sku": "DOM-10459",
+  "description": "The Domus Sling Plus. A dependable bags pick with a clean, no-nonsense design and the everyday features you actually use.",
+  "specs": {
+    "warranty": "2 years international warranty",
+    "inTheBox": "Sling, Luggage pass-through sleeve, Rain cover, Care card, Detachable shoulder strap",
+    "countryOfOrigin": "India",
+    "returns": "30-day return, original packaging",
+    "support": "In-app chat, 8am–8pm IST",
+    "weightGrams": 565,
+    "material": "Waxed canvas",
+    "colour": "Olive",
+    "modelYear": 2023
+  },
+  "reviews": [
+    {
+      "id": "459-r1",
+      "author": "Ishaan R.",
+      "rating": 5,
+      "title": "Solid, boring, reliable",
+      "body": "Bought this after returning two other brands. It does the one job it advertises and does it well. Domus seem to have got this one right. No regrets.",
+      "date": "2024-10-17",
+      "verifiedPurchase": true,
+      "helpfulVotes": 54
+    },
+    {
+      "id": "459-r3",
+      "author": "Rohan H.",
+      "rating": 5,
+      "title": "Exactly what I wanted",
+      "body": "Replaced a five-year-old unit with this. Setup took under ten minutes with no surprises. Packaging was tidy and nothing was missing. No regrets.",
+      "date": "2024-09-27",
+      "verifiedPurchase": true,
+      "helpfulVotes": 157
+    },
+    {
+      "id": "459-r2",
+      "author": "Pooja C.",
+      "rating": 2,
+      "title": "Expected better",
+      "body": "Wanted to like this one. The fit and finish do not match the photos. Does not match the listing photos. Hoping the replacement is better.",
+      "date": "2024-09-11",
+      "verifiedPurchase": true,
+      "helpfulVotes": 74
+    },
+    {
+      "id": "459-r4",
+      "author": "Rhea N.",
+      "rating": 5,
+      "title": "Would buy again",
+      "body": "Picked it up on a whim and it has earned its place. It does the one job it advertises and does it well. Packaging was tidy and nothing was missing. Would buy the same one again.",
+      "date": "2024-02-27",
+      "verifiedPurchase": true,
+      "helpfulVotes": 62
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "price-tracker-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "server:start": "npm --workspace=server start",
+    "server:dev": "npm --workspace=server run dev",
+    "server:test": "npm --workspace=server test",
+    "test": "npm --workspace=server test"
+  }
+}

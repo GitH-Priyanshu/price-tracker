@@ -1,0 +1,26 @@
+{
+  "revision": 626001,
+  "variant": 3,
+  "validUntil": 1789818376939,
+  "classes": {
+    "priceWrap": "pw-m4",
+    "priceValue": "pv-m4",
+    "mrp": "mr-m4",
+    "sale": "sl-m4",
+    "badge": "bd-m4",
+    "rating": "rt-m4",
+    "seller": "sr-m4",
+    "delivery": "dl-m4",
+    "stock": "st-m4"
+  },
+  "order": [
+    "delivery",
+    "rating",
+    "stock",
+    "seller"
+  ],
+  "priceTag": "output",
+  "priceCarrier": "split",
+  "ratingAria": false,
+  "sellerTitle": true
+}
