@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import http from 'http';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import config from '../src/config/index.js';
 import { scrapeProduct } from '../src/services/storeClient.js';
-import { scrapeProductPage, closeBrowser } from '../src/services/browserScraper.js';
+import { closeBrowser } from '../src/services/browserScraper.js';
 import {
   getProductByStoreId,
   insertPriceHistory,
@@ -59,7 +60,6 @@ async function resolveProduct(storeId) {
   } catch {}
 
   if (!product) {
-    // Default catalog metadata fallbacks
     const catalogMap = {
       '459': { name: 'Domus Sling Plus', sku: 'DOM-10459', category: 'bags', brand: 'Domus' },
       '510': { name: 'Meridian Touch Monitor Two', sku: 'MER-10510', category: 'monitors', brand: 'Meridian' },
@@ -83,6 +83,58 @@ async function resolveProduct(storeId) {
 }
 
 /**
+ * Creates an ephemeral local HTTP stub server to serve demo faults (real 503s or slow delay)
+ * through the actual Playwright browser network client path.
+ */
+function createFaultStubServer({ mode, originalUrl, storeId }) {
+  let productNavCount = 0;
+  const server = http.createServer(async (req, res) => {
+    const isProductNav = req.url.startsWith(`/product/${storeId}`);
+    if (isProductNav) {
+      productNavCount++;
+    }
+
+    if (mode === 'simulate_failure') {
+      // Real HTTP 503 Service Unavailable response
+      res.writeHead(503, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Retry-After': '2'
+      });
+      res.end('<!DOCTYPE html><html><head><title>503 Service Unavailable</title></head><body><h1>503 Service Unavailable</h1><p>Demo Fault Injection: Upstream Gateway Down</p></body></html>');
+      return;
+    }
+
+    if (mode === 'simulate_slow') {
+      if (isProductNav && productNavCount === 1) {
+        // Hold connection open for 13,000ms to trigger client-side Playwright timeout (12s)
+        await new Promise((r) => setTimeout(r, 13000));
+        if (!res.writableEnded) {
+          res.writeHead(504, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end('<h1>Gateway Timeout</h1>');
+        }
+        return;
+      }
+
+      // On attempt 2+: redirect browser to real upstream mock store
+      res.writeHead(307, { Location: originalUrl });
+      res.end();
+      return;
+    }
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      const stubUrl = `http://127.0.0.1:${port}/product/${storeId}`;
+      resolve({
+        stubUrl,
+        close: () => new Promise((r) => server.close(r))
+      });
+    });
+  });
+}
+
+/**
  * Runs a single observable scrape scenario with detailed timeline output
  */
 async function runScenario({
@@ -97,149 +149,156 @@ async function runScenario({
   console.log(`SCENARIO: ${title}`);
   console.log('='.repeat(80));
   console.log(`Product Target : ${product.name} (Store ID: ${product.store_product_id}, SKU: ${product.sku || 'N/A'})`);
-  console.log(`Target URL     : ${product.url}`);
   console.log(`Browser Mode   : ${headed ? 'HEADED (Visible Chromium GUI Window)' : 'HEADLESS'}`);
   console.log(`DB Mode        : ${noDb ? 'DRY RUN (--no-db active: zero database writes)' : 'LIVE DB PERSISTENCE'}`);
   console.log(`Fault Injection: ${
-    simulateSlow ? 'SIMULATE-SLOW (Attempt 1 forced timeout, then retry)' :
-    simulateFailure ? 'SIMULATE-FAILURE (Upstream 503 outage across all attempts)' :
-    'NONE (Standard Production Pipeline)'
+    simulateSlow ? 'SIMULATE-SLOW (Local stub server stalls Attempt 1 for 13s, then recovers)' :
+    simulateFailure ? 'SIMULATE-FAILURE (Local stub server returns real HTTP 503 across all attempts)' :
+    'NONE (Standard Production Pipeline against Mock Store)'
   }`);
   console.log('-'.repeat(80));
 
-  let attemptCount = 0;
-  let customScraper = null;
+  let stubServer = null;
+  let targetProduct = product;
 
   if (simulateSlow) {
-    customScraper = async (url, opts) => {
-      attemptCount++;
-      if (attemptCount === 1) {
-        log('⚠️', `[DEMO FAULT INJECTION] Injecting simulated slow anti-bot challenge stall (forcing Attempt 1 TIMEOUT)...`);
-        await new Promise((r) => setTimeout(r, 13000));
-        throw new Error('page.waitForFunction: Timeout 12000ms exceeded (Simulated Anti-Bot Dwell Stall)');
-      }
-      log('🔄', `[DEMO FAULT INJECTION] Attempt 2 running standard production scraper...`);
-      return scrapeProductPage(url, opts);
-    };
+    stubServer = await createFaultStubServer({
+      mode: 'simulate_slow',
+      originalUrl: product.url,
+      storeId: product.store_product_id
+    });
+    targetProduct = { ...product, url: stubServer.stubUrl };
+    log('⏳', `[Demo Fault Stub Server] Serving simulated slow network on ${stubServer.stubUrl}`);
   } else if (simulateFailure) {
-    customScraper = async () => {
-      attemptCount++;
-      log('❌', `[DEMO FAULT INJECTION] Injecting simulated upstream 503 Service Unavailable outage...`);
-      const err = new Error('HTTP 503: Service Unavailable (Simulated Upstream Cloudflare Outage)');
-      err.status = 503;
-      throw err;
-    };
+    stubServer = await createFaultStubServer({
+      mode: 'simulate_failure',
+      originalUrl: product.url,
+      storeId: product.store_product_id
+    });
+    targetProduct = { ...product, url: stubServer.stubUrl };
+    log('❌', `[Demo Fault Stub Server] Serving real HTTP 503 outage on ${stubServer.stubUrl}`);
   }
 
   log('🚀', `Starting scrape orchestration for "${product.name}"...`);
   const startTime = Date.now();
 
-  const scrapeResult = await scrapeProduct(product, {
-    headed,
-    scraperFn: customScraper || scrapeProductPage,
-    timeoutMs: config.requestTimeoutMs
-  });
+  try {
+    const scrapeResult = await scrapeProduct(targetProduct, {
+      headed,
+      timeoutMs: config.requestTimeoutMs,
+      onBackoffWait: (waitMs, nextAttempt) => {
+        log('⏱️', `waiting ${(waitMs / 1000).toFixed(1)} s before attempt ${nextAttempt}`);
+      }
+    });
 
-  const totalDurationMs = Date.now() - startTime;
+    const totalDurationMs = Date.now() - startTime;
 
-  // Print Timeline of Attempts
-  console.log('\n' + '-'.repeat(80));
-  console.log('TIMELINE OF ATTEMPTS:');
-  console.log('-'.repeat(80));
+    // Print Timeline of Attempts
+    console.log('\n' + '-'.repeat(80));
+    console.log('TIMELINE OF ATTEMPTS:');
+    console.log('-'.repeat(80));
 
-  scrapeResult.attempt_details.forEach((att) => {
-    const outcomeIcon = att.outcome === 'success' ? '✅' : '❌';
-    console.log(
-      `  Attempt #${att.attempt} [${att.duration_ms}ms] -> ${outcomeIcon} ${att.outcome.toUpperCase()}` +
-      (att.error_type ? ` | Error: [${att.error_type}] ${att.error_message}` : '')
-    );
-  });
+    scrapeResult.attempt_details.forEach((att, idx) => {
+      const outcomeIcon = att.outcome === 'success' ? '✅' : '❌';
+      console.log(
+        `  Attempt #${att.attempt} [${att.duration_ms}ms] -> ${outcomeIcon} ${att.outcome.toUpperCase()}` +
+        (att.error_type ? ` | Error: [${att.error_type}] ${att.error_message}` : '')
+      );
+      if (att.backoff_wait_ms && idx < scrapeResult.attempt_details.length - 1) {
+        console.log(`  -> waiting ${(att.backoff_wait_ms / 1000).toFixed(1)} s before attempt ${att.attempt + 1}`);
+      }
+    });
 
-  console.log('-'.repeat(80));
-  console.log(`FINAL OUTCOME: ${scrapeResult.success ? '✅ SUCCESS' : '❌ FAILED'}`);
-  console.log(`Total Attempts : ${scrapeResult.attempts}`);
-  console.log(`Total Duration : ${totalDurationMs}ms`);
+    console.log('-'.repeat(80));
+    console.log(`FINAL OUTCOME: ${scrapeResult.success ? '✅ SUCCESS' : '❌ FAILED'}`);
+    console.log(`Total Attempts : ${scrapeResult.attempts}`);
+    console.log(`Total Duration : ${totalDurationMs}ms`);
 
-  if (scrapeResult.success) {
-    console.log(`Resolved Price : ₹${scrapeResult.data.price}`);
-    console.log(`MRP on Page    : ${scrapeResult.data.mrp ? '₹' + scrapeResult.data.mrp : 'N/A'}`);
-    console.log(`Stock Status   : ${scrapeResult.data.stock_status} (${scrapeResult.data.stock_quantity ?? 'N/A'} units)`);
-    console.log(`Agreement Check: PASSED (HTML-parsed ₹${scrapeResult.data.price} == Rendered text "${scrapeResult.data.rendered_price_text}")`);
-  } else {
-    console.log(`Failure Reason : [${scrapeResult.error_type}] ${scrapeResult.error_message}`);
-  }
+    if (scrapeResult.success) {
+      console.log(`Resolved Price : ₹${scrapeResult.data.price}`);
+      console.log(`MRP on Page    : ${scrapeResult.data.mrp ? '₹' + scrapeResult.data.mrp : 'N/A'}`);
+      console.log(`Stock Status   : ${scrapeResult.data.stock_status} (${scrapeResult.data.stock_quantity ?? 'N/A'} units)`);
+      console.log(`Agreement Check: PASSED (HTML-parsed ₹${scrapeResult.data.price} == Rendered text "${scrapeResult.data.rendered_price_text}")`);
+    } else {
+      console.log(`Failure Reason : [${scrapeResult.error_type}] ${scrapeResult.error_message}`);
+    }
 
-  // Database Write Decision
-  console.log('-'.repeat(80));
-  console.log('DATABASE PERSISTENCE AUDIT:');
-  if (noDb) {
-    console.log('  Decision : ⛔ SKIPPED');
-    console.log('  Reason   : --no-db dry-run flag specified. Zero database tables touched.');
-  } else if (!scrapeResult.success) {
-    console.log('  Decision : ⛔ SKIPPED PRICE WRITE');
-    console.log('  Reason   : Scrape failed. Bad/missing price will NEVER be written to price_history table.');
-    const isTest = String(product.store_product_id).startsWith('test-') || String(product.id).startsWith('virtual-');
-    if (product.id && !isTest) {
-      try {
-        await insertScrapeLog({
-          product_id: product.id,
-          status: 'failed',
-          attempts: scrapeResult.attempts,
-          duration_ms: totalDurationMs,
-          http_status: scrapeResult.http_status,
-          error_type: scrapeResult.error_type,
-          error_message: scrapeResult.error_message,
-          attempt_details: scrapeResult.attempt_details
-        });
-        console.log('  Audit    : 📝 Honest failure telemetry recorded to scrape_logs (status: "failed").');
-      } catch (dbErr) {
-        console.warn('  Audit    : Could not write scrape log:', dbErr.message);
+    // Database Write Decision
+    console.log('-'.repeat(80));
+    console.log('DATABASE PERSISTENCE AUDIT:');
+    if (noDb) {
+      console.log('  Decision : ⛔ SKIPPED');
+      console.log('  Reason   : --no-db dry-run flag specified. Zero database tables touched.');
+    } else if (!scrapeResult.success) {
+      console.log('  Decision : ⛔ SKIPPED PRICE WRITE');
+      console.log('  Reason   : Scrape failed. Bad/missing price will NEVER be written to price_history table.');
+      const isTest = String(product.store_product_id).startsWith('test-') || String(product.id).startsWith('virtual-');
+      if (product.id && !isTest) {
+        try {
+          await insertScrapeLog({
+            product_id: product.id,
+            status: 'failed',
+            attempts: scrapeResult.attempts,
+            duration_ms: totalDurationMs,
+            http_status: scrapeResult.http_status,
+            error_type: scrapeResult.error_type,
+            error_message: scrapeResult.error_message,
+            attempt_details: scrapeResult.attempt_details
+          });
+          console.log('  Audit    : 📝 Honest failure telemetry recorded to scrape_logs (status: "failed").');
+        } catch (dbErr) {
+          console.warn('  Audit    : Could not write scrape log:', dbErr.message);
+        }
+      } else {
+        console.log('  Audit    : Test/virtual product ID detected; skipped live DB audit write.');
       }
     } else {
-      console.log('  Audit    : Test/virtual product ID detected; skipped live DB audit write.');
-    }
-  } else {
-    console.log('  Decision : 💾 RECORDED');
-    const isTest = String(product.store_product_id).startsWith('test-') || String(product.id).startsWith('virtual-');
-    if (product.id && !isTest) {
-      try {
-        const historyRow = await insertPriceHistory({
-          product_id: product.id,
-          price: scrapeResult.data.price,
-          stock_status: scrapeResult.data.stock_status,
-          stock_quantity: scrapeResult.data.stock_quantity
-        });
-        await insertScrapeLog({
-          product_id: product.id,
-          price_history_id: historyRow?.id,
-          status: scrapeResult.attempts > 1 ? 'retried' : 'success',
-          attempts: scrapeResult.attempts,
-          duration_ms: totalDurationMs,
-          http_status: scrapeResult.http_status,
-          attempt_details: scrapeResult.attempt_details
-        });
-        console.log(`  Audit    : Successfully recorded price_history (ID: ${historyRow?.id}) and scrape_logs entry.`);
-      } catch (dbErr) {
-        console.warn('  Audit    : Failed to write to database:', dbErr.message);
+      console.log('  Decision : 💾 RECORDED');
+      const isTest = String(product.store_product_id).startsWith('test-') || String(product.id).startsWith('virtual-');
+      if (product.id && !isTest) {
+        try {
+          const historyRow = await insertPriceHistory({
+            product_id: product.id,
+            price: scrapeResult.data.price,
+            stock_status: scrapeResult.data.stock_status,
+            stock_quantity: scrapeResult.data.stock_quantity
+          });
+          await insertScrapeLog({
+            product_id: product.id,
+            price_history_id: historyRow?.id,
+            status: scrapeResult.attempts > 1 ? 'retried' : 'success',
+            attempts: scrapeResult.attempts,
+            duration_ms: totalDurationMs,
+            http_status: scrapeResult.http_status,
+            attempt_details: scrapeResult.attempt_details
+          });
+          console.log(`  Audit    : Successfully recorded price_history (ID: ${historyRow?.id}) and scrape_logs entry.`);
+        } catch (dbErr) {
+          console.warn('  Audit    : Failed to write to database:', dbErr.message);
+        }
+      } else {
+        console.log('  Reason   : Product is virtual/test product. Skipped live DB pollution.');
       }
-    } else {
-      console.log('  Reason   : Product is virtual/test product. Skipped live DB pollution.');
+    }
+    console.log('='.repeat(80) + '\n');
+
+    return {
+      scenario: title,
+      product_id: product.store_product_id,
+      outcome: scrapeResult.success ? (scrapeResult.attempts > 1 ? 'retried' : 'success') : 'failed',
+      attempts: scrapeResult.attempts,
+      duration_ms: totalDurationMs,
+      scraped_price: scrapeResult.data?.price || null,
+      rendered_price_text: scrapeResult.data?.rendered_price_text || null,
+      error_type: scrapeResult.error_type || null,
+      error_message: scrapeResult.error_message || null,
+      db_written: !noDb && scrapeResult.success && !String(product.id).startsWith('virtual-')
+    };
+  } finally {
+    if (stubServer) {
+      await stubServer.close().catch(() => {});
     }
   }
-  console.log('='.repeat(80) + '\n');
-
-  return {
-    scenario: title,
-    product_id: product.store_product_id,
-    outcome: scrapeResult.success ? (scrapeResult.attempts > 1 ? 'retried' : 'success') : 'failed',
-    attempts: scrapeResult.attempts,
-    duration_ms: totalDurationMs,
-    scraped_price: scrapeResult.data?.price || null,
-    rendered_price_text: scrapeResult.data?.rendered_price_text || null,
-    error_type: scrapeResult.error_type || null,
-    error_message: scrapeResult.error_message || null,
-    db_written: !noDb && scrapeResult.success && !String(product.id).startsWith('virtual-')
-  };
 }
 
 // -----------------------------------------------------------------------------
@@ -299,7 +358,6 @@ async function main() {
       simulateFailure: true
     }));
   } else {
-    // Single scenario run based on passed flags
     let title = 'Normal Scrape';
     if (simulateSlow) title = 'Stalled Attempt with Retry';
     if (simulateFailure) title = 'Simulated Upstream Failure';
@@ -308,7 +366,7 @@ async function main() {
       title,
       product,
       headed,
-      noDb: argv.includes('--no-db'),
+      noDb,
       simulateSlow,
       simulateFailure
     }));

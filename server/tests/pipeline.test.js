@@ -489,6 +489,45 @@ test('ScrapeProduct Pipeline Orchestration (Mocked Scraper)', async (t) => {
     assert.match(result.attempt_details[0].error_message, /PRICE_MISMATCH/);
     assert.equal(result.attempt_details[1].outcome, 'success');
   });
+
+  await t.test('real HTTP 503 response is classified as HTTP_5XX, retried, and records backoff wait', async () => {
+    let callCount = 0;
+    const backoffEvents = [];
+    const mockScraper = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          html: '<h1>503 Service Unavailable</h1>',
+          httpStatus: 503
+        };
+      }
+      return {
+        html: normalHtml,
+        renderedPriceText: '₹6,727',
+        httpStatus: 200
+      };
+    };
+
+    const result = await scrapeProduct(product, {
+      scraperFn: mockScraper,
+      maxAttempts: 2,
+      timeoutMs: 500,
+      onBackoffWait: (waitMs, nextAttempt) => {
+        backoffEvents.push({ waitMs, nextAttempt });
+      }
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.attempts, 2);
+    assert.equal(result.attempt_details[0].outcome, 'failed');
+    assert.equal(result.attempt_details[0].error_type, 'HTTP_5XX');
+    assert.equal(result.attempt_details[0].http_status, 503);
+    assert.match(result.attempt_details[0].error_message, /503/);
+    assert.ok(result.attempt_details[0].backoff_wait_ms > 0);
+    assert.equal(backoffEvents.length, 1);
+    assert.equal(backoffEvents[0].nextAttempt, 2);
+    assert.equal(result.attempt_details[1].outcome, 'success');
+  });
 });
 
 test('SearchProducts Logic', async (t) => {

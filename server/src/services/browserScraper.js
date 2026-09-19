@@ -95,10 +95,16 @@ export async function scrapeProductPage(productUrl, options = {}) {
 
     const httpStatus = response ? response.status() : 200;
 
-    // Check for HTTP errors
-    if (httpStatus === 404) {
-      const html = await page.content();
-      return { html, httpStatus, durationMs: Date.now() - startTime };
+    // Check for HTTP errors (4xx, 5xx) immediately
+    if (httpStatus >= 400) {
+      const html = await page.content().catch(() => '');
+      return {
+        html,
+        httpStatus,
+        durationMs: Date.now() - startTime,
+        renderedPriceText: null,
+        allDomPriceElements: []
+      };
     }
 
     // Explicitly click real accept button if present in initial DOM

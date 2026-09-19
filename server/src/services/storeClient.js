@@ -139,9 +139,15 @@ export async function scrapeProduct(product, options = {}) {
       currentHttpStatus = scrapeResult.httpStatus || 200;
       lastHttpStatus = currentHttpStatus;
 
-      // Handle 404 or client errors immediately
+      // Handle HTTP client/server errors immediately
       if (currentHttpStatus === 404) {
         throw new ParseError(`Product not found (HTTP 404)`, 'HTTP_4XX');
+      }
+      if (currentHttpStatus >= 500) {
+        throw new Error(`Upstream server returned HTTP ${currentHttpStatus}`);
+      }
+      if (currentHttpStatus >= 400) {
+        throw new Error(`Upstream server returned HTTP ${currentHttpStatus}`);
       }
 
       // 2. Parse HTML
@@ -246,6 +252,10 @@ export async function scrapeProduct(product, options = {}) {
         }
 
         const waitMs = Math.min(calculateBackoff(attempt), remainingBudget - 500);
+        attemptDetails[attemptDetails.length - 1].backoff_wait_ms = waitMs;
+        if (typeof options.onBackoffWait === 'function') {
+          options.onBackoffWait(waitMs, attempt + 1);
+        }
         await new Promise((r) => setTimeout(r, waitMs));
       }
     }
