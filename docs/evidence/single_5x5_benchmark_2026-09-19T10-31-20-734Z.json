@@ -4,7 +4,9 @@
     "commit_used": "735e5373c5856d559ad5b722880df574e5ab087b",
     "total_runs": 25,
     "products_tested": 5,
-    "runs_per_product": 5
+    "runs_per_product": 5,
+    "git_commit": "735e537365063fe45b883088b90161833fa58097",
+    "parser_version": "1.0.0"
   },
   "summary": {
     "total_runs": 25,
@@ -3350,5 +3352,7 @@
       },
       "parser_commit": "735e5373c5856d559ad5b722880df574e5ab087b"
     }
-  ]
+  ],
+  "git_commit": "735e537365063fe45b883088b90161833fa58097",
+  "parser_version": "1.0.0"
 }

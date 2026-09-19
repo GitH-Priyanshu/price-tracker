@@ -40,6 +40,12 @@ test('Scrape Runner Orchestration & Honest Logging', async (t) => {
     assert.ok(successProduct.store_product_id.startsWith('test-'));
     assert.ok(failProduct.store_product_id.startsWith('test-'));
 
+    // Clean slate for test products in case of prior interrupted runs
+    await supabase.from('scrape_logs').delete().eq('product_id', successProduct.id);
+    await supabase.from('price_history').delete().eq('product_id', successProduct.id);
+    await supabase.from('scrape_logs').delete().eq('product_id', failProduct.id);
+    await supabase.from('price_history').delete().eq('product_id', failProduct.id);
+
     const testProducts = [successProduct, failProduct];
 
     await t.test('one failing product does not stop others and records honest outcomes', async () => {
@@ -124,15 +130,22 @@ test('Scrape Runner Orchestration & Honest Logging', async (t) => {
       assert.equal(cycle.counts.skipped, 2, 'Both test products should be skipped by dedupe guard');
     });
 
-    await t.test('in-memory cycle lock prevents overlapping cycles', async () => {
+    await t.test('scrape queue serializes overlapping cycles without dropping triggers', async () => {
       let resolver;
       const blockingPromise = new Promise((resolve) => {
         resolver = resolve;
       });
 
+      const executionOrder = [];
       const slowScraper = async () => {
         await blockingPromise;
+        executionOrder.push('cycle1');
         return { success: true, attempts: 1, data: { price: 500, stock_status: 'in_stock' } };
+      };
+
+      const secondScraper = async () => {
+        executionOrder.push('cycle2');
+        return { success: true, attempts: 1, data: { price: 600, stock_status: 'in_stock' } };
       };
 
       const firstCyclePromise = runScrapeCycle({
@@ -142,18 +155,21 @@ test('Scrape Runner Orchestration & Honest Logging', async (t) => {
         scraperFn: slowScraper
       });
 
-      const secondCycle = await runScrapeCycle({
+      const secondCyclePromise = runScrapeCycle({
         products: [successProduct],
         testToken: RUNNER_TEST_TOKEN,
         force: true,
-        scraperFn: slowScraper
+        scraperFn: secondScraper
       });
-      assert.equal(secondCycle.is_running, true);
-      assert.equal(secondCycle.message, 'Scrape cycle already in progress');
 
+      // Release first cycle
       resolver();
-      const firstCycle = await firstCyclePromise;
+
+      const [firstCycle, secondCycle] = await Promise.all([firstCyclePromise, secondCyclePromise]);
       assert.ok(firstCycle.run_id);
+      assert.ok(secondCycle.run_id);
+      assert.notEqual(firstCycle.run_id, secondCycle.run_id);
+      assert.deepEqual(executionOrder, ['cycle1', 'cycle2']);
     });
 
     await t.test('runScrapeCycle without products argument invokes listActiveProducts loader', async () => {

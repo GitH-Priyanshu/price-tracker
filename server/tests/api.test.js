@@ -6,6 +6,7 @@ import app from '../src/index.js';
 import config from '../src/config/index.js';
 import { createRateLimiter } from '../src/middleware/rateLimiter.js';
 import { getSupabaseClient } from '../src/db/client.js';
+import scrapeQueue, { QueueFullError } from '../src/services/scrapeQueue.js';
 
 let server = null;
 let baseUrl = '';
@@ -198,5 +199,97 @@ test('Level B5: Security & Error Handling', async (t) => {
     assert.equal(nextCalled, 2);
     assert.equal(statusSet, 429);
     assert.equal(jsonPayload?.error?.code, 'RATE_LIMITED');
+  });
+
+  await t.test('Express trust proxy is configured for reverse proxy environments', () => {
+    assert.equal(app.get('trust proxy'), 1);
+  });
+
+  await t.test('POST /api/products enforces active products cap and returns 400 LIMIT_EXCEEDED', async () => {
+    const originalMax = config.maxTrackedProducts;
+    config.maxTrackedProducts = 1; // Temporarily cap at 1 (since live DB has 1 product: 459)
+
+    try {
+      const res = await fetch(`${baseUrl}/api/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ store_product_id: 'test-cap-overflow-999' })
+      });
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.equal(body.error?.code, 'LIMIT_EXCEEDED');
+      assert.match(body.error?.message, /limit reached/);
+    } finally {
+      config.maxTrackedProducts = originalMax;
+    }
+  });
+});
+
+test('Level B5 Hotfix: Serialized Scrape Queue', async (t) => {
+  await t.test('executes jobs sequentially in FIFO order', async () => {
+    const executionOrder = [];
+    scrapeQueue.clear();
+
+    const job1 = scrapeQueue.enqueue({
+      type: 'test-job-1',
+      fn: async () => {
+        await new Promise((r) => setTimeout(r, 50));
+        executionOrder.push('job1');
+        return 'res1';
+      }
+    });
+
+    const job2 = scrapeQueue.enqueue({
+      type: 'test-job-2',
+      fn: async () => {
+        executionOrder.push('job2');
+        return 'res2';
+      }
+    });
+
+    const [res1, res2] = await Promise.all([job1.promise, job2.promise]);
+    assert.equal(res1, 'res1');
+    assert.equal(res2, 'res2');
+    assert.deepEqual(executionOrder, ['job1', 'job2']);
+  });
+
+  await t.test('rejects with QueueFullError when queue capacity is exceeded', () => {
+    scrapeQueue.clear();
+    const originalMax = scrapeQueue.maxSize;
+    scrapeQueue.setMaxSize(2);
+
+    try {
+      // Fill the queue
+      scrapeQueue.enqueue({
+        type: 'blocker',
+        fn: () => new Promise((resolve) => setTimeout(resolve, 500))
+      });
+      scrapeQueue.enqueue({
+        type: 'queued-1',
+        fn: () => Promise.resolve()
+      });
+      scrapeQueue.enqueue({
+        type: 'queued-2',
+        fn: () => Promise.resolve()
+      });
+
+      // 4th should exceed bound of 2 in queue
+      assert.throws(
+        () => {
+          scrapeQueue.enqueue({
+            type: 'overflow',
+            fn: () => Promise.resolve()
+          });
+        },
+        (err) => {
+          assert.equal(err.code, 'QUEUE_FULL');
+          assert.match(err.message, /limit reached/);
+          return true;
+        }
+      );
+    } finally {
+      scrapeQueue.setMaxSize(originalMax);
+      scrapeQueue.clear();
+    }
   });
 });

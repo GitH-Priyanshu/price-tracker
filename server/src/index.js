@@ -12,6 +12,9 @@ validateConfig();
 
 const app = express();
 
+// Trust reverse proxy (Render, Railway) so req.ip is correctly derived from client
+app.set('trust proxy', 1);
+
 // 1. HTTP Request Logging
 app.use(requestLogger);
 

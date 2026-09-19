@@ -172,6 +172,32 @@ test('HTML DOM Parser Against Fixtures', async (t) => {
     });
   });
 
+  await t.test('live captured product 989 HTML extracts full price and MRP without truncation', () => {
+    const live989Html = fs.readFileSync(path.resolve(__dirname, 'fixtures/product_989_live.html'), 'utf8');
+    const parsed = parseProductHtml(live989Html, { store_product_id: '989' });
+    assert.equal(parsed.store_product_id, '989');
+    assert.equal(parsed.name, 'Vista Pro Display Neo');
+    assert.equal(parsed.sku, 'VIS-10989');
+    assert.equal(parsed.price, 55154);
+    assert.equal(parsed.mrp, 74532);
+    assert.equal(parsed.stock_status, 'in_stock');
+  });
+
+  await t.test('HTML with spaced thousands in active price element extracts full price (7921)', () => {
+    const htmlSpaced = `
+      <h1>Ironwood Monitor Neo</h1>
+      <div class="price-main">
+        <span class="price-value" style="display: none;" aria-hidden="true">₹99,999</span>
+        <span class="mr-m4" style="text-decoration: line-through;">₹15,000</span>
+        <b class="pv-m4">₹7 921</b>
+      </div>
+      <span class="stock-badge in-stock">In stock</span>
+    `;
+    const parsed = parseProductHtml(htmlSpaced, { store_product_id: '985' });
+    assert.equal(parsed.price, 7921);
+    assert.equal(parsed.mrp, 15000);
+  });
+
   await t.test('structure shift / missing element DOM throws PARSE_ERROR', () => {
     assert.throws(() => parseProductHtml(structureShiftHtml, meta), (err) => {
       assert.equal(err.errorType, 'PARSE_ERROR');

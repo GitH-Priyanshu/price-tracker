@@ -4,7 +4,9 @@
     "commit_used": "c23a1046c98fa01715e63cf5b958de5a99663f61",
     "total_runs": 25,
     "products_tested": 5,
-    "runs_per_product": 5
+    "runs_per_product": 5,
+    "git_commit": "c23a1046c98fa01715e63cf5b958de5a99663f61",
+    "parser_version": "1.1.0"
   },
   "summary": {
     "total_runs": 25,
@@ -3518,5 +3520,7 @@
       "selected_element_info": null,
       "parser_commit": "c23a1046c98fa01715e63cf5b958de5a99663f61"
     }
-  ]
+  ],
+  "git_commit": "c23a1046c98fa01715e63cf5b958de5a99663f61",
+  "parser_version": "1.1.0"
 }

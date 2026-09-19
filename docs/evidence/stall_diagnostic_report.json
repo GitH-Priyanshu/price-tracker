@@ -53,5 +53,7 @@
       "url": "https://demo.inelabteamdev.com/api/products/120/price",
       "status": 200
     }
-  ]
+  ],
+  "git_commit": "735e537365063fe45b883088b90161833fa58097",
+  "parser_version": "1.0.0"
 }

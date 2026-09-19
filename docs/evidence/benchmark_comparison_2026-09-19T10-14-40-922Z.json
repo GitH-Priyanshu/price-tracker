@@ -2,7 +2,9 @@
   "metadata": {
     "timestamp": "2026-09-19T10-14-40-922Z",
     "total_runs_per_batch": 20,
-    "target_products": 5
+    "target_products": 5,
+    "git_commit": "735e537365063fe45b883088b90161833fa58097",
+    "parser_version": "1.0.0"
   },
   "stall_comparison": {
     "fix_disabled": {
@@ -3778,5 +3780,7 @@
         ]
       }
     ]
-  }
+  },
+  "git_commit": "735e537365063fe45b883088b90161833fa58097",
+  "parser_version": "1.0.0"
 }

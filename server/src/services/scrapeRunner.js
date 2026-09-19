@@ -239,18 +239,17 @@ async function processProductScrape(product, runId, options = {}) {
  *   is_running?: boolean
  * }>}
  */
-export async function runScrapeCycle(options = {}) {
-  // Overlapping cycle guard
-  if (isCycleRunning) {
-    console.warn(`[ScrapeRunner] Scrape cycle already active (run_id: ${activeRunId}). Rejecting trigger.`);
-    return {
-      run_id: activeRunId,
-      is_running: true,
-      message: 'Scrape cycle already in progress'
-    };
-  }
+import scrapeQueue, { QueueFullError } from './scrapeQueue.js';
 
-  const runId = randomUUID();
+export { scrapeQueue, QueueFullError };
+
+/**
+ * Executes a scrape cycle directly.
+ * @param {Object} options
+ * @returns {Promise<Object>}
+ */
+async function _executeScrapeCycle(options = {}) {
+  const runId = options.runId || randomUUID();
   const cycleStart = Date.now();
   const startedAt = new Date().toISOString();
 
@@ -361,3 +360,26 @@ export async function runScrapeCycle(options = {}) {
     activeRunId = null;
   }
 }
+
+/**
+ * Public entrypoint for triggering a scrape cycle.
+ * Serializes all cycles through the central bounded ScrapeQueue.
+ * 
+ * @param {Object} [options]
+ * @param {boolean} [options.skipQueue=false]
+ * @returns {Promise<Object>}
+ */
+export async function runScrapeCycle(options = {}) {
+  if (options.skipQueue) {
+    return _executeScrapeCycle(options);
+  }
+
+  const enqueued = scrapeQueue.enqueue({
+    type: 'cycle',
+    metadata: { force: options.force, productsCount: options.products?.length },
+    fn: (jobId) => _executeScrapeCycle({ ...options, runId: jobId, skipQueue: true })
+  });
+
+  return enqueued.promise;
+}
+

@@ -30,8 +30,9 @@ export function createRateLimiter(options = {}) {
   interval.unref(); // Do not hold Node process open
 
   return (req, res, next) => {
-    // Determine client IP
-    const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+    // Determine client IP (respects Express 'trust proxy' setting)
+    const ip = req.ip ||
+               req.headers['x-forwarded-for']?.split(',')[0].trim() ||
                req.socket?.remoteAddress ||
                '127.0.0.1';
 

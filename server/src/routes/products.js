@@ -10,7 +10,7 @@ import {
   getLatestPrice,
   getScrapeLogs
 } from '../db/index.js';
-import { runScrapeCycle } from '../services/scrapeRunner.js';
+import { runScrapeCycle, scrapeQueue } from '../services/scrapeRunner.js';
 
 const router = Router();
 
@@ -117,28 +117,45 @@ router.post('/', async (req, res, next) => {
       });
     }
 
+    // Check active product quota (default 10, configurable via config.maxTrackedProducts)
+    const activeProducts = await listActiveProducts();
+    const isAlreadyActive = activeProducts.some((p) => p.store_product_id === storeProductId);
+
+    if (!isAlreadyActive && activeProducts.length >= config.maxTrackedProducts) {
+      return res.status(400).json({
+        error: {
+          code: 'LIMIT_EXCEEDED',
+          message: `Active tracked products limit reached (${activeProducts.length}/${config.maxTrackedProducts}). Deactivate an existing product before tracking new ones.`
+        }
+      });
+    }
+
     // Resolve full product metadata
     const metadata = await resolveProductMetadata(storeProductId, body);
 
     // Create or reactivate product record in Supabase
     const product = await createProduct(metadata);
 
-    // Trigger one immediate scrape so the first data point appears
-    // If runScrapeCycle is triggered directly for this product with force: true
-    try {
-      await runScrapeCycle({ products: [product], force: true });
-    } catch (scrapeErr) {
-      console.warn(`[Products API] Immediate scrape warning for product ${product.id}:`, scrapeErr.message);
+    // Enqueue background scrape via serialized ScrapeQueue without blocking HTTP response
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        scrapeQueue.enqueue({
+          type: 'product',
+          metadata: { productId: product.id, storeProductId: product.store_product_id },
+          fn: (jobId) => runScrapeCycle({ products: [product], force: true, skipQueue: true, runId: jobId })
+        });
+      } catch (queueErr) {
+        console.warn(`[Products API] ⚠️ Scrape queue full, skipping initial scrape for product ${product.id}:`, queueErr.message);
+      }
     }
 
-    // Re-fetch updated product and latest price
+    // Return immediately with 201 Created and existing latest price if present
     const latestPrice = await getLatestPrice(product.id);
-    const updatedProduct = await getProduct(product.id);
 
     return res.status(201).json({
       product: {
-        ...(updatedProduct || product),
-        latest_price: latestPrice
+        ...product,
+        latest_price: latestPrice || null
       }
     });
   } catch (err) {

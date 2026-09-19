@@ -26,6 +26,10 @@ const config = {
   scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '1', 10),
   dedupeWindowMinutes: parseInt(process.env.DEDUPE_WINDOW_MINUTES || '10', 10),
 
+  // Hardening & Quotas
+  maxTrackedProducts: parseInt(process.env.MAX_TRACKED_PRODUCTS || '10', 10),
+  scrapeQueueLimit: parseInt(process.env.SCRAPE_QUEUE_LIMIT || '10', 10),
+
   // Environment
   nodeEnv: process.env.NODE_ENV || 'development'
 };

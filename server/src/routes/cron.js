@@ -66,25 +66,38 @@ router.post('/scrape', async (req, res, next) => {
       });
     }
 
-    // 3. Normal async mode: respond immediately with 202 Accepted
-    const runId = crypto.randomUUID();
-
-    // In test environment, skip background scrape to guarantee zero live DB mutations
+    // 3. Normal async mode: enqueue in scrapeQueue and respond immediately with 202 Accepted
     if (process.env.NODE_ENV !== 'test') {
-      // Launch scrape cycle in background without blocking response
-      setImmediate(() => {
-        runScrapeCycle({ force }).catch((err) => {
-          console.error(`[Cron Background Error] Scrape cycle ${runId} failed:`, err.message);
-        });
+      const enqueued = scrapeQueue.enqueue({
+        type: 'cron',
+        metadata: { force },
+        fn: (jobId) => runScrapeCycle({ force, skipQueue: true, runId: jobId })
+      });
+
+      return res.status(202).json({
+        status: 'accepted',
+        message: 'Scrape cycle accepted and enqueued',
+        run_id: enqueued.id,
+        queue_position: enqueued.position
       });
     }
 
     return res.status(202).json({
       status: 'accepted',
-      message: 'Scrape cycle accepted and running in background',
-      run_id: runId
+      message: 'Scrape cycle accepted and enqueued',
+      run_id: crypto.randomUUID(),
+      queue_position: 1
     });
   } catch (err) {
+    if (err instanceof QueueFullError || err.code === 'QUEUE_FULL') {
+      return res.status(429).json({
+        status: 'skipped',
+        error: {
+          code: 'QUEUE_FULL',
+          message: err.message
+        }
+      });
+    }
     next(err);
   }
 });
