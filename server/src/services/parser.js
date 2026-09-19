@@ -68,16 +68,39 @@ export function parsePriceText(rawText) {
   // 4. Strip currency words and symbols
   cleaned = cleaned.replace(/(?:₹|rs\.?|inr|\/-|\(incl\. of all taxes\))/gi, '').trim();
 
-  // 5. Detect and normalize Euro formatting: e.g. "6.727,00" -> "6727.00"
-  if (/^\d{1,3}(?:\.\d{3})+(?:,\d{2})?$/.test(cleaned)) {
-    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-  } else if (/^\d+(?:,\d{2})$/.test(cleaned)) {
-    // e.g. "6727,00"
-    cleaned = cleaned.replace(',', '.');
-  } else {
-    // Standard format: commas or spaces are thousand separators: "6,727.00" or "6 727"
-    cleaned = cleaned.replace(/[,\s]/g, '');
+  // 5. Detect and normalize thousand and decimal separators
+  // Case A: Both . and , are present
+  if (cleaned.includes('.') && cleaned.includes(',')) {
+    if (cleaned.indexOf('.') < cleaned.indexOf(',')) {
+      // Euro format: "6.727,00" or "61.925,00" -> '.' is thousands, ',' is decimal
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Standard format: "6,727.00" -> ',' is thousands, '.' is decimal
+      cleaned = cleaned.replace(/,/g, '');
+    }
+  } else if (cleaned.includes(',')) {
+    // Only comma present:
+    // e.g. "6727,00" (euro decimal) vs "6,727" (standard thousands)
+    if (/,\d{2}$/.test(cleaned)) {
+      cleaned = cleaned.replace(',', '.');
+    } else {
+      cleaned = cleaned.replace(/,/g, '');
+    }
+  } else if (cleaned.includes('.')) {
+    // Only period present:
+    // If there is a single period followed by 3 digits (e.g. "61.925" or "7.493"),
+    // it is ambiguous whether it represents a European thousands separator or a 3-digit decimal.
+    // Strict data integrity rule: DO NOT GUESS. Reject with PARSE_ERROR so the scrape is retried.
+    if (/^\d+\.\d{3}$/.test(cleaned)) {
+      throw new ParseError(
+        `Ambiguous price format "${rawText}": cannot distinguish between thousands and decimal separator without guessing`,
+        'PARSE_ERROR'
+      );
+    }
   }
+
+  // Strip remaining spaces
+  cleaned = cleaned.replace(/\s+/g, '');
 
   // Match any remaining digits and optional decimal
   const match = cleaned.match(/(\d+(?:\.\d+)?)/);
@@ -233,12 +256,19 @@ export function parseProductHtml(html, fallbackMeta = {}) {
 
   const { stock_status, stock_quantity } = parseStockText(stockRawText, stockClass);
 
-  // 7. Store product ID
+  // 7. Extract SKU / Product ID from page if present
+  const skuMatch = html.match(/(?:sku|item|product code)[\s:#_-]*([a-z0-9-]+)/i) ||
+                   html.match(/\b([A-Z]{3}-\d+)\b/) ||
+                   html.match(/data-sku="([^"]+)"/i);
+  const sku = skuMatch ? (skuMatch[1] || skuMatch[0]).trim() : null;
+
+  // 8. Store product ID
   const storeProductId = String(fallbackMeta.store_product_id || fallbackMeta.id || '');
 
   return {
     store_product_id: storeProductId,
     name,
+    sku,
     price,
     stock_status,
     stock_quantity

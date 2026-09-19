@@ -135,6 +135,10 @@ export async function scrapeProductPage(productUrl, options = {}) {
     }
 
     // Wait for the visible price element to resolve and placeholder/loading text to clear
+    // Use remaining attempt budget (up to 16s headroom) instead of a tight 10s ceiling
+    const elapsedSoFar = Date.now() - startTime;
+    const waitTimeoutMs = Math.max(8000, Math.min(timeoutMs - elapsedSoFar, 16000));
+
     await page.waitForFunction(
       () => {
         const el = document.querySelector('.price-block, [class*="priceWrap"], [class*="pw-"]');
@@ -148,7 +152,7 @@ export async function scrapeProductPage(productUrl, options = {}) {
           !text.includes('Updating')
         );
       },
-      { timeout: Math.min(timeoutMs, 10000) }
+      { timeout: waitTimeoutMs }
     );
 
     const html = await page.content();

@@ -41,9 +41,26 @@ test('Price Text Sanitization & Robust Parsing', async (t) => {
     assert.equal(parsePriceText('6 727.50'), 6727.5);
   });
 
-  await t.test('parses euro comma decimal formatting', () => {
+  await t.test('parses unambiguous euro comma decimal formatting', () => {
     assert.equal(parsePriceText('6.727,00'), 6727);
     assert.equal(parsePriceText('1.250,50'), 1250.5);
+    assert.equal(parsePriceText('₹7.493,00'), 7493);
+  });
+
+  await t.test('rejects ambiguous price strings (e.g. single dot with 3 digits) to trigger retry', () => {
+    assert.throws(() => parsePriceText('₹61.925'), (err) => {
+      assert.equal(err.errorType, 'PARSE_ERROR');
+      assert.match(err.message, /Ambiguous price format/);
+      return true;
+    });
+    assert.throws(() => parsePriceText('₹7.493'), (err) => {
+      assert.equal(err.errorType, 'PARSE_ERROR');
+      return true;
+    });
+    assert.throws(() => parsePriceText('61.925'), (err) => {
+      assert.equal(err.errorType, 'PARSE_ERROR');
+      return true;
+    });
   });
 
   await t.test('strips zero-width and invisible noise characters', () => {
@@ -170,6 +187,14 @@ test('Validator Strict Data Integrity Rules', async (t) => {
   await t.test('rejects identity mismatch (wrong product) with IDENTITY_MISMATCH', () => {
     assert.throws(
       () => validateScrapedProduct({ store_product_id: '999', name: 'Other Item', price: 500, stock_status: 'in_stock' }, expected),
+      (err) => err.errorType === 'IDENTITY_MISMATCH'
+    );
+  });
+
+  await t.test('rejects SKU identity mismatch with IDENTITY_MISMATCH', () => {
+    const withSku = { ...expected, sku: 'AUR-10120' };
+    assert.throws(
+      () => validateScrapedProduct({ ...withSku, sku: 'WRONG-SKU-999', price: 500, stock_status: 'in_stock' }, withSku),
       (err) => err.errorType === 'IDENTITY_MISMATCH'
     );
   });

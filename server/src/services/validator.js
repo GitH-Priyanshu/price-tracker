@@ -70,5 +70,17 @@ export function validateScrapedProduct(scraped, expected = {}) {
     }
   }
 
+  // 5. SKU Identity Check (if available in expected metadata and scraped data)
+  if (expected.sku && scraped.sku) {
+    const cleanScraped = scraped.sku.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanExpected = expected.sku.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanScraped !== cleanExpected) {
+      throw new ValidationError(
+        `Identity Mismatch: Scraped SKU "${scraped.sku}" does not match expected SKU "${expected.sku}"`,
+        'IDENTITY_MISMATCH'
+      );
+    }
+  }
+
   return true;
 }

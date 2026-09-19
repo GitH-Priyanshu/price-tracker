@@ -7,8 +7,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test tests/**/*.test.js",
+    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
     "db:verify": "node scripts/verify-db.js",
+    "scrape:batch": "node scripts/run-reliability-batch.js",
+    "scrape:cycle": "node scripts/run-cycle.js",
     "scrape:test-headless": "node scripts/test-headless-live.js",
     "scrape:watch": "node scripts/scrape-once.js"
   },

@@ -58,6 +58,7 @@ test('Live Database Operations & Lifecycle', async (t) => {
   }
 
   const testStoreId = 'test-probe-unit-b2';
+  assert.ok(testStoreId.startsWith('test-'), 'Safety Guard: Test store IDs must start with test-');
   let createdProductId = null;
 
   try {
@@ -164,5 +165,6 @@ test('Live Database Operations & Lifecycle', async (t) => {
     if (createdProductId) {
       await supabase.from('products').delete().eq('id', createdProductId);
     }
+    await supabase.from('products').delete().like('store_product_id', 'test-%');
   }
 });

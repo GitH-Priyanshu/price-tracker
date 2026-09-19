@@ -99,7 +99,8 @@ export async function scrapeProduct(product, options = {}) {
   const scraper = options.scraperFn || scrapeProductPage;
 
   // Enforce overall per-product budget so one product never hangs the whole run
-  const totalBudgetMs = options.totalBudgetMs || (timeoutMs * maxAttempts) + 6000;
+  // Budget generously covers maxAttempts, backoff pauses, and network overhead
+  const totalBudgetMs = options.totalBudgetMs || (timeoutMs * maxAttempts) + 10000;
   const overallStart = Date.now();
 
   const attemptDetails = [];
