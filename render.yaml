@@ -5,6 +5,8 @@ services:
     plan: free
     region: oregon
     healthCheckPath: /api/health
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: NODE_ENV
         value: production

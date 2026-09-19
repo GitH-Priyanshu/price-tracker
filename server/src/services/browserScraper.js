@@ -27,9 +27,7 @@ export async function getBrowserInstance(options = {}) {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-zygote',
-        ...(process.platform === 'linux' ? ['--single-process'] : [])
+        '--disable-gpu'
       ]
     });
     sharedBrowserIsHeaded = !!headed;

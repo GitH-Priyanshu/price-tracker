@@ -11,12 +11,12 @@ ENV PORT=10000
 ENV SCRAPE_CONCURRENCY=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Copy workspace package definitions first for optimal layer caching
-COPY package.json ./
-COPY server/package.json ./server/
+# Copy workspace package definitions and lockfiles first for optimal layer caching
+COPY package*.json ./
+COPY server/package*.json ./server/
 
 # Install production dependencies only (never copy local node_modules)
-RUN npm --workspace=server ci --omit=dev || npm install --workspace=server --omit=dev
+RUN npm ci --workspace=server --omit=dev
 
 # Copy application source code (note: .dockerignore strictly excludes .env and node_modules)
 COPY server ./server

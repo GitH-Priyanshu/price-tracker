@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import config from '../config/index.js';
 import {
   createProduct,
@@ -186,6 +187,66 @@ router.get('/:id', async (req, res, next) => {
         ...product,
         latest_price: latestPrice
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/products/:id/scrape
+ * Manually forces a scrape for a specific tracked product.
+ * PROTECTED: Requires x-cron-secret header.
+ */
+router.post('/:id/scrape', async (req, res, next) => {
+  try {
+    const suppliedSecret = req.headers['x-cron-secret'];
+    if (!suppliedSecret || typeof suppliedSecret !== 'string' || !config.cronSecret) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid or missing x-cron-secret header'
+        }
+      });
+    }
+
+    const hashA = crypto.createHash('sha256').update(suppliedSecret).digest();
+    const hashB = crypto.createHash('sha256').update(config.cronSecret).digest();
+    if (!crypto.timingSafeEqual(hashA, hashB)) {
+      return res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid or missing x-cron-secret header'
+        }
+      });
+    }
+
+    const product = await getProduct(req.params.id);
+    if (!product) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: `Product with id "${req.params.id}" not found`
+        }
+      });
+    }
+
+    const wait = req.query.wait === 'true';
+    if (wait) {
+      const summary = await runScrapeCycle({ products: [product], force: true, skipQueue: true });
+      return res.status(200).json({ status: 'completed', summary });
+    }
+
+    const enqueued = scrapeQueue.enqueue({
+      type: 'product',
+      metadata: { productId: product.id, storeProductId: product.store_product_id },
+      fn: (jobId) => runScrapeCycle({ products: [product], force: true, skipQueue: true, runId: jobId })
+    });
+
+    return res.status(202).json({
+      status: 'accepted',
+      message: `Scrape cycle enqueued for product "${product.name}"`,
+      run_id: enqueued.id
     });
   } catch (err) {
     next(err);
