@@ -2,11 +2,17 @@ process.env.NODE_ENV = 'test';
 
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import app from '../src/index.js';
 import config from '../src/config/index.js';
 import { createRateLimiter } from '../src/middleware/rateLimiter.js';
 import { getSupabaseClient } from '../src/db/client.js';
 import scrapeQueue, { QueueFullError } from '../src/services/scrapeQueue.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let server = null;
 let baseUrl = '';
@@ -342,3 +348,63 @@ test('Level B5 Hotfix: Serialized Scrape Queue', async (t) => {
     }
   });
 });
+
+test('Level B6: Headed Scraper & Fault Injection Production Guard', async (t) => {
+  await t.test('scrape-once.js aborts immediately if fault injection flags are passed in production mode', () => {
+    const scriptPath = path.resolve(__dirname, '../scripts/scrape-once.js');
+    
+    // Attempt running with --simulate-slow and NODE_ENV=production
+    try {
+      execSync(`node "${scriptPath}" --simulate-slow`, {
+        env: { ...process.env, NODE_ENV: 'production' },
+        stdio: 'pipe'
+      });
+      assert.fail('Should have exited with non-zero code in production');
+    } catch (err) {
+      assert.equal(err.status, 1);
+      const stderr = err.stderr.toString();
+      assert.match(stderr, /strictly forbidden in production/i);
+    }
+
+    // Attempt running with --simulate-failure and NODE_ENV=production
+    try {
+      execSync(`node "${scriptPath}" --simulate-failure`, {
+        env: { ...process.env, NODE_ENV: 'production' },
+        stdio: 'pipe'
+      });
+      assert.fail('Should have exited with non-zero code in production');
+    } catch (err) {
+      assert.equal(err.status, 1);
+      const stderr = err.stderr.toString();
+      assert.match(stderr, /strictly forbidden in production/i);
+    }
+  });
+
+  await t.test('POST /api/products ignores fault injection payload properties', async () => {
+    const res = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        store_product_id: 'test-b6-guard-prod',
+        simulate_slow: true,
+        simulate_failure: true,
+        simulateSlow: true
+      })
+    });
+
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.product.simulate_slow, undefined);
+    assert.equal(body.product.simulate_failure, undefined);
+  });
+
+  await t.test('POST /api/cron/scrape ignores fault injection query params', async () => {
+    const res = await fetch(`${baseUrl}/api/cron/scrape?simulate_slow=true&simulate_failure=true`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': config.cronSecret }
+    });
+
+    assert.equal(res.status, 202);
+  });
+});
+

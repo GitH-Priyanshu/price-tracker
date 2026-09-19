@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import config from '../config/index.js';
 
 let sharedBrowser = null;
+let sharedBrowserIsHeaded = false;
 
 /**
  * Returns or initializes the shared Chromium browser instance.
@@ -12,8 +13,8 @@ let sharedBrowser = null;
 export async function getBrowserInstance(options = {}) {
   const { headed = false } = options;
 
-  if (sharedBrowser && !sharedBrowser.isConnected()) {
-    sharedBrowser = null;
+  if (sharedBrowser && (!sharedBrowser.isConnected() || sharedBrowserIsHeaded !== !!headed)) {
+    await closeBrowser();
   }
 
   if (!sharedBrowser) {
@@ -25,6 +26,7 @@ export async function getBrowserInstance(options = {}) {
         '--disable-dev-shm-usage'
       ]
     });
+    sharedBrowserIsHeaded = !!headed;
   }
 
   return sharedBrowser;
@@ -41,6 +43,7 @@ export async function closeBrowser() {
       // Ignore errors on close
     } finally {
       sharedBrowser = null;
+      sharedBrowserIsHeaded = false;
     }
   }
 }
@@ -173,6 +176,25 @@ export async function scrapeProductPage(productUrl, options = {}) {
       },
       { timeout: waitTimeoutMs }
     );
+
+    // In headed mode: visually highlight resolved price and stock elements for screen recording clarity
+    if (options.headed) {
+      await page.evaluate(() => {
+        const pb = document.querySelector('.price-block, .price-main');
+        if (pb) {
+          pb.style.outline = '3px solid #10b981';
+          pb.style.boxShadow = '0 0 16px rgba(16, 185, 129, 0.45)';
+          pb.style.borderRadius = '8px';
+          pb.style.transition = 'all 0.3s ease';
+        }
+        const sb = document.querySelector('.stock-badge');
+        if (sb) {
+          sb.style.outline = '2px solid #3b82f6';
+          sb.style.borderRadius = '4px';
+        }
+      }).catch(() => {});
+      await page.waitForTimeout(800).catch(() => {});
+    }
 
     // In the same page state: read the active price element text and all DOM price elements
     let renderedPriceText = null;

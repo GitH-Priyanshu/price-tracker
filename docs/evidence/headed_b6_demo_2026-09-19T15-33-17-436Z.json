@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "timestamp": "2026-09-19T15:33:17.436Z",
+    "commit_hash": "756f6436d9739a034524c6ff42d5dcf04e479212",
+    "mode": "demo_all",
+    "headed": false,
+    "no_db": true
+  },
+  "results": [
+    {
+      "scenario": "1. Normal Scrape (1st-try Success, Visible Window & Highlight)",
+      "product_id": "459",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 6460,
+      "scraped_price": 5995,
+      "rendered_price_text": "₹5,995",
+      "error_type": null,
+      "error_message": null,
+      "db_written": false
+    },
+    {
+      "scenario": "2. Stalled Attempt with Exponential Backoff & Retry Recovery",
+      "product_id": "459",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 20476,
+      "scraped_price": 5995,
+      "rendered_price_text": "Rs. 5,995.00",
+      "error_type": null,
+      "error_message": null,
+      "db_written": false
+    },
+    {
+      "scenario": "3. Upstream Outage / Failure Handled Without Corrupting Database",
+      "product_id": "459",
+      "outcome": "failed",
+      "attempts": 3,
+      "duration_ms": 3200,
+      "scraped_price": null,
+      "rendered_price_text": null,
+      "error_type": "PARSE_ERROR",
+      "error_message": "HTTP 503: Service Unavailable (Simulated Upstream Cloudflare Outage)",
+      "db_written": false
+    }
+  ]
+}

@@ -193,8 +193,62 @@ curl -s -X POST http://localhost:3000/api/cron/scrape \
   "run_id": "e2f074d2-f67b-402a-9e19-9154a4f8953f"
 }
 ```
-*For manual testing and verification, add `?wait=true`:*
 ```bash
 curl -s -X POST "http://localhost:3000/api/cron/scrape?wait=true" \
   -H "x-cron-secret: your-cron-secret"
 ```
+
+---
+
+## Headed Observable Scraper & Screen Recording (Level B6)
+
+Level B6 introduces an observable, headed scraping mode allowing developers and evaluators to watch the scraper navigate the mock store, dismiss cookie banners, interact with anti-bot elements, visually highlight resolved price elements, and observe retry and failure mechanics in real time.
+
+### CLI Command & npm Script
+Run from repository root or the `server/` workspace:
+```bash
+npm run scrape:watch -- [productId] [flags]
+# Or directly with node:
+node server/scripts/scrape-once.js [productId] [flags]
+```
+
+### Supported Flags
+| Flag | Description |
+|---|---|
+| `<productId>` | Target product store ID (defaults to `459` — Domus Sling Plus) |
+| `--headed` | Launches visible Chromium browser window with live interaction (default) |
+| `--headless` | Runs in headless mode (useful for CI/automated checks) |
+| `--no-db` | Dry-run mode: skips writing price history to Supabase database |
+| `--simulate-slow` | Demo fault injection: forces Attempt 1 to stall and timeout, followed by successful retry |
+| `--simulate-failure` | Demo fault injection: forces upstream outage (503), demonstrating retry exhaustion and DB write rejection |
+| `--demo-all` | Runs all 3 demonstration scenarios sequentially for an automated 2–3 minute screen recording |
+
+> [!IMPORTANT]
+> **Production Security Guard**: The fault injection flags (`--simulate-slow`, `--simulate-failure`, `--demo-all`) can only be invoked via CLI in development/test environments. They are strictly rejected when `NODE_ENV === 'production'`, and cannot be triggered via HTTP API endpoints, cron query parameters, request bodies, or environment variables.
+
+---
+
+### Suggested 2-to-4 Minute Screen Recording Script
+
+#### Option A: One-Command Automated Sequence (Recommended)
+Run all three scenarios back-to-back:
+```bash
+npm run scrape:watch -- 459 --demo-all
+```
+This runs:
+1. **Scenario 1 (Normal Scrape)**: Opens visible browser, dismisses cookie banner, hovers over `.price-block`, clicks reveal button, highlights resolved price with green outline, and logs successful attempt timeline.
+2. **Scenario 2 (Stalled Attempt & Retry)**: Injects slow dwell stall, triggers Playwright timeout on Attempt 1, applies backoff, and automatically recovers on Attempt 2.
+3. **Scenario 3 (Simulated Failure)**: Injects upstream outage across all attempts, shows retry exhaustion, logs honest failure telemetry, and deliberately skips database writes to preserve data integrity.
+
+#### Option B: Individual Interactive Commands
+```bash
+# 1. Normal observable scrape
+npm run scrape:watch -- 459 --no-db
+
+# 2. Slow challenge stall with retry recovery
+npm run scrape:watch -- 459 --no-db --simulate-slow
+
+# 3. Upstream outage with zero DB pollution
+npm run scrape:watch -- 459 --no-db --simulate-failure
+```
+
