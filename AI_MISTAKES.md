@@ -33,3 +33,8 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
 - **What went wrong**: While updating `scripts/verify-db.js` to execute `.select('*').limit(1)`, the variable `count` was removed from the destructured return object (`const { data, error }`), but the success logging statement on line 37 still referenced `count`. This caused the catch block to intercept a `ReferenceError: count is not defined` even though the Supabase query itself had succeeded.
 - **How it was detected**: The user ran `npm --prefix server run db:verify`, and the script reported `UNEXPECTED ERROR - count is not defined`.
 - **How it was fixed**: Updated the query call to `const { data, error, count } = await supabase.from(table).select('*', { count: 'exact' }).limit(1)`, properly restoring the `count` variable and confirming successful table access.
+
+### Entry 7: Chromium `--single-process` Flag Causing Tab Crashes on Windows
+- **What went wrong**: In `browserScraper.js`, `--single-process` was included in the Chromium launch arguments. On Windows environments, `--single-process` causes Chromium's internal tab process to terminate abruptly upon context or page navigation.
+- **How it was detected**: Running `scripts/test-headless-live.js` failed with `page.goto: Target page, context or browser has been closed`.
+- **How it was fixed**: Removed `--single-process` from the launch arguments while retaining memory-safe flags (`--disable-dev-shm-usage`, `--no-sandbox`), enabling headless Chromium to operate reliably.

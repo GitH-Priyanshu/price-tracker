@@ -23,7 +23,7 @@ const config = {
   // Scraping Budgets & Concurrency
   requestTimeoutMs: parseInt(process.env.REQUEST_TIMEOUT_MS || '10000', 10),
   maxAttempts: parseInt(process.env.MAX_ATTEMPTS || '3', 10),
-  scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '2', 10),
+  scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '1', 10),
   dedupeWindowMinutes: parseInt(process.env.DEDUPE_WINDOW_MINUTES || '10', 10),
 
   // Environment
