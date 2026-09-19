@@ -41,6 +41,11 @@ test('Price Text Sanitization & Robust Parsing', async (t) => {
     assert.equal(parsePriceText('6 727.50'), 6727.5);
   });
 
+  await t.test('parses multi-period European prices like 8.593.00 and 7.921.00', () => {
+    assert.equal(parsePriceText('₹8.593.00'), 8593);
+    assert.equal(parsePriceText('Rs. 7.921.00'), 7921);
+  });
+
   await t.test('parses unambiguous euro comma decimal formatting', () => {
     assert.equal(parsePriceText('6.727,00'), 6727);
     assert.equal(parsePriceText('1.250,50'), 1250.5);

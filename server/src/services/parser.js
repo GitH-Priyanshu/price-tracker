@@ -97,6 +97,12 @@ export function parsePriceText(rawText) {
         'PARSE_ERROR'
       );
     }
+    // Handle multi-period formats (e.g. "8.593.00" or "7.921.00" where dot is thousands and last dot is decimal)
+    const dotCount = (cleaned.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      const lastDot = cleaned.lastIndexOf('.');
+      cleaned = cleaned.slice(0, lastDot).replace(/\./g, '') + cleaned.slice(lastDot);
+    }
   }
 
   // Strip remaining spaces

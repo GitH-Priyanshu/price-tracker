@@ -126,23 +126,32 @@ export async function scrapeProductPage(productUrl, options = {}) {
     }
 
     // Click accept cookies if it popped up during dwell
+    let cookieClickError = null;
     try {
       const overlayBtn = await page.$('.cookie-overlay button[aria-label="Accept cookies"]');
       if (overlayBtn) await overlayBtn.click();
-    } catch {}
+    } catch (err) {
+      cookieClickError = err.message;
+    }
 
     // Wait for Reveal Price button to become enabled before clicking
+    let revealBtnWaitError = null;
     try {
       await page.waitForSelector('button[aria-label="Reveal price"]:not([disabled])', { timeout: 3000 });
-    } catch {}
+    } catch (err) {
+      revealBtnWaitError = err.message;
+    }
 
+    let revealClickError = null;
     const revealBtn = await page.$('button[aria-label="Reveal price"], button:has-text("Reveal price")');
     if (revealBtn) {
       try {
         await revealBtn.click({ timeout: 2000 });
-      } catch {
-        // If already triggered by dwell, click might not be required
+      } catch (err) {
+        revealClickError = err.message;
       }
+    } else {
+      revealClickError = 'Reveal button not found in DOM';
     }
 
     // Wait for the visible price element to resolve and placeholder/loading text to clear
@@ -171,7 +180,10 @@ export async function scrapeProductPage(productUrl, options = {}) {
     return {
       html,
       httpStatus,
-      durationMs
+      durationMs,
+      cookieClickError,
+      revealBtnWaitError,
+      revealClickError
     };
   } finally {
     // Ensure the isolated context is closed to release all memory
