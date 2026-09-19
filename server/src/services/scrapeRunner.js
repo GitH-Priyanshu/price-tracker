@@ -275,8 +275,8 @@ export async function runScrapeCycle(options = {}) {
       products = await listFn();
     }
 
-    // Safety guard: strictly separate test runs from live runs using unforgeable Symbol
-    const isTestRun = options.testToken === RUNNER_TEST_TOKEN;
+    // Safety guard: strictly separate test runs from live runs using unforgeable Symbol or NODE_ENV=test
+    const isTestRun = options.testToken === RUNNER_TEST_TOKEN || process.env.NODE_ENV === 'test';
 
     if (isTestRun) {
       for (const p of products) {

@@ -157,3 +157,16 @@ The following authentic fixture snapshots have been captured:
 5. `product_normal_revealed.html`: Rendered DOM with revealed real price and stock badge.
 6. `product_error_page.html`: Rendered DOM when product ID does not exist (404).
 7. `product_structure_shift.html`: Synthetic mutation testing missing or altered DOM elements.
+
+---
+
+## 7. Price Plausibility Validation Rules
+
+To protect the historical database from corrupted prices caused by DOM element shifts, partial string slicing, or spaced thousands (e.g. `₹7 921` parsed as `7`), the validator enforces an evidence-based MRP plausibility check whenever an MRP badge is present:
+
+- **Minimum Plausibility Ratio**: `0.10` (Price must be at least 10% of MRP).
+  - *Evidence*: Legitimate heavy sales discounts in benchmark reached `0.314` (e.g. Product 989: ₹53,691 on ₹170,998 MRP). Truncation parser errors produced ratios <= `0.001` (e.g. ₹7 on ₹170,998). The `0.10` floor prevents parser errors while guaranteeing deep discounts are not rejected.
+- **Maximum Plausibility Ratio**: `2.00` (Price cannot exceed 200% of MRP).
+  - *Evidence*: Accommodates dynamic surge pricing without accepting corrupted multi-order-of-magnitude values.
+- **Absence of MRP**: When no MRP element exists on the page, the ratio check is skipped gracefully without rejecting the scrape.
+

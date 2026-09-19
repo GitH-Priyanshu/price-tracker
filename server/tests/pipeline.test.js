@@ -234,18 +234,23 @@ test('Validator Strict Data Integrity Rules', async (t) => {
     );
   });
 
-  await t.test('MRP plausibility rule rejects prices below 30% or above 120% of MRP', () => {
+  await t.test('MRP plausibility rule rejects prices below 10% or above 200% of MRP', () => {
     // Valid: 7921 with MRP 12002 (ratio = 0.66) -> passes
     assert.equal(
       validateScrapedProduct({ ...expected, price: 7921, mrp: 12002, stock_status: 'in_stock' }, expected),
       true
     );
-    // Valid: surge pricing 12821 with MRP 11386 (ratio = 1.126) -> passes
+    // Valid deep discount: 3800 with MRP 12002 (ratio = 0.316 > 0.10) -> passes
+    assert.equal(
+      validateScrapedProduct({ ...expected, price: 3800, mrp: 12002, stock_status: 'in_stock' }, expected),
+      true
+    );
+    // Valid: surge pricing 12821 with MRP 11386 (ratio = 1.126 < 2.0) -> passes
     assert.equal(
       validateScrapedProduct({ ...expected, price: 12821, mrp: 11386, stock_status: 'in_stock' }, expected),
       true
     );
-    // Implausibly low: truncated price 7 with MRP 12002 (ratio = 0.00058 < 0.30) -> throws VALIDATION
+    // Implausibly low: truncated price 7 with MRP 12002 (ratio = 0.00058 < 0.10) -> throws VALIDATION
     assert.throws(
       () => validateScrapedProduct({ ...expected, price: 7, mrp: 12002, stock_status: 'in_stock' }, expected),
       (err) => {
@@ -254,7 +259,7 @@ test('Validator Strict Data Integrity Rules', async (t) => {
         return true;
       }
     );
-    // Implausibly low: truncated price 8.59 with MRP 13020 (ratio = 0.00066 < 0.30) -> throws VALIDATION
+    // Implausibly low: truncated price 8.59 with MRP 13020 (ratio = 0.00066 < 0.10) -> throws VALIDATION
     assert.throws(
       () => validateScrapedProduct({ ...expected, price: 8.59, mrp: 13020, stock_status: 'in_stock' }, expected),
       (err) => {
@@ -263,9 +268,9 @@ test('Validator Strict Data Integrity Rules', async (t) => {
         return true;
       }
     );
-    // Implausibly high: decoy price 25000 with MRP 12002 (ratio = 2.08 > 1.20) -> throws VALIDATION
+    // Implausibly high: runaway decoy price 30000 with MRP 12002 (ratio = 2.50 > 2.0) -> throws VALIDATION
     assert.throws(
-      () => validateScrapedProduct({ ...expected, price: 25000, mrp: 12002, stock_status: 'in_stock' }, expected),
+      () => validateScrapedProduct({ ...expected, price: 30000, mrp: 12002, stock_status: 'in_stock' }, expected),
       (err) => {
         assert.equal(err.errorType, 'VALIDATION');
         assert.match(err.message, /Plausibility Failure/);

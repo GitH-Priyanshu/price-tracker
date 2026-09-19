@@ -2,13 +2,20 @@ import express from 'express';
 import cors from 'cors';
 import config, { validateConfig } from './config/index.js';
 import healthRouter from './routes/health.js';
+import searchRouter from './routes/search.js';
+import productsRouter from './routes/products.js';
+import cronRouter from './routes/cron.js';
+import { requestLogger } from './middleware/requestLogger.js';
 
 // Validate baseline configuration at startup
 validateConfig();
 
 const app = express();
 
-// Security and CORS
+// 1. HTTP Request Logging
+app.use(requestLogger);
+
+// 2. Security and CORS (restricted to FRONTEND_ORIGIN)
 app.use(cors({
   origin: config.frontendOrigin === '*' ? '*' : config.frontendOrigin,
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -17,10 +24,13 @@ app.use(cors({
 
 app.use(express.json());
 
-// Routes
+// 3. API Routes
 app.use('/api/health', healthRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/products', productsRouter);
+app.use('/api/cron', cronRouter);
 
-// Central 404 handler for undefined API routes
+// 4. Central 404 handler for undefined API routes
 app.use('/api/*', (req, res) => {
   res.status(404).json({
     error: {
@@ -30,19 +40,30 @@ app.use('/api/*', (req, res) => {
   });
 });
 
-// Central error handler
+// 5. Central error handler (never leaks stack traces to the client)
 app.use((err, req, res, next) => {
-  console.error('[Unhandled Error]:', err.message);
-  res.status(err.status || 500).json({
+  console.error('[API Error]:', err.message);
+  const status = err.status || (err.name === 'ValidationError' ? 400 : 500);
+  const code = err.code || (status === 400 ? 'VALIDATION_ERROR' : 'INTERNAL_SERVER_ERROR');
+  res.status(status).json({
     error: {
-      code: err.code || 'INTERNAL_SERVER_ERROR',
-      message: config.nodeEnv === 'production' ? 'An unexpected error occurred' : err.message
+      code,
+      message: err.message || 'An unexpected error occurred'
     }
   });
 });
 
-// Start listener when executed directly
-if (process.env.NODE_ENV !== 'test') {
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+// Start listener ONLY when executed directly (not when imported in tests)
+const isDirectRun = process.argv[1] && (
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]) ||
+  process.argv[1].endsWith('src' + path.sep + 'index.js') ||
+  process.argv[1].endsWith('src/index.js')
+);
+
+if (isDirectRun && process.env.NODE_ENV !== 'test') {
   app.listen(config.port, () => {
     console.log(`[Server] Price Tracker API running on port ${config.port}`);
     console.log(`[Config] Environment: ${config.nodeEnv}`);

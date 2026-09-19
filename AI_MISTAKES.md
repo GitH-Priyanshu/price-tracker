@@ -84,4 +84,10 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
 - **Classification**: **`INVALID`**. All results, latency measurements, and success rates from that earlier 15-run batch are null and void and must not be used for statistical or timeout decisions.
 - **How it was fixed**: Explicitly dismissed the `.cookie-overlay` at page load via an injected stylesheet and mutation observer before interaction, added SKU identity validation, and superseded the run with a verified 20-scrape headless benchmark writing raw JSON output to `docs/evidence/`.
 
+### Entry 16: Plausibility Thresholds Derived from Too Small a Distribution
+- **What went wrong**: Plausibility thresholds in `validator.js` were initially set to `0.30` (min fraction) and `1.20` (max cap) based on an empirical sample of 41 historical scrapes where the lowest observed valid ratio was `0.56`. However, subsequent benchmarking across 25 runs revealed that product 989 legitimately offered a deep discount ratio of `0.314` (₹53,691 on MRP ₹170,998), uncomfortably close to the 0.30 threshold and exposing a risk of false rejections.
+- **How it was detected**: User analysis of the benchmark results identified that valid price/MRP ratios extend down to `0.314`, whereas parser truncations (e.g. ₹7, ₹7.92, ₹8.59) produce ratios $\le 0.0007$ (0.07%).
+- **How it was fixed**: Loosened the validator plausibility bounds to minimum `0.10` (10% of MRP) and maximum `2.00` (200% of MRP). This reliably filters out single-digit and truncated parser errors while providing ample headroom for genuine deep sales and dynamic surge pricing without biasing stored prices upward. Updated validator logic and unit tests accordingly.
+
+
 

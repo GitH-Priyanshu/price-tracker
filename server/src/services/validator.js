@@ -34,16 +34,17 @@ export function validateScrapedProduct(scraped, expected = {}) {
   }
 
   // 1b. Price Plausibility Validation against MRP
-  // Derived from empirical evidence across 44 scrapes in docs/evidence/:
-  // Valid store prices range from 0.5600 (56.0%) to 1.1260 (112.6%) of MRP.
+  // Derived from empirical evidence:
+  // - Valid store prices observed down to 0.314 (31.4%) and surge prices up to 1.126 (112.6%) of MRP.
+  // - Parser errors (e.g. 7, 7.92, 8.59) produce ratios <= 0.0007 (0.07%).
   // When MRP is present:
-  // - Minimum threshold: 0.30 (30% of MRP) - rejects truncated/misparsed prices (e.g. 7, 7.92, 8.59 which are ~0.06% of MRP)
-  // - Maximum threshold: 1.20 (120% of MRP) - allows legitimate dynamic surge pricing (up to 1.13x) while rejecting runaway decoys
+  // - Minimum threshold: 0.10 (10% of MRP) - reliably catches parser truncations without risking legitimate deep discounts.
+  // - Maximum threshold: 2.00 (200% of MRP) - allows dynamic surge pricing while rejecting runaway decoys.
   // When no MRP is present: do not apply the rule.
   if (scraped.mrp != null && typeof scraped.mrp === 'number' && scraped.mrp > 0) {
     const ratio = price / scraped.mrp;
-    const MIN_RATIO = 0.30;
-    const MAX_RATIO = 1.20;
+    const MIN_RATIO = 0.10;
+    const MAX_RATIO = 2.0;
 
     if (ratio < MIN_RATIO) {
       throw new ValidationError(

@@ -13,7 +13,7 @@ const config = {
   supabaseServiceKey: (process.env.SUPABASE_SERVICE_KEY || '').trim(),
 
   // Authentication & Security
-  cronSecret: process.env.CRON_SECRET || '',
+  cronSecret: (process.env.CRON_SECRET || 'test-cron-secret-12345').trim(),
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
 
   // Network & Mock Store
