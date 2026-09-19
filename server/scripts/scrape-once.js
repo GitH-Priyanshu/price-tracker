@@ -33,12 +33,15 @@ if (isProduction && (hasSimulateSlow || hasSimulateFailure || hasDemoAll)) {
   process.exit(1);
 }
 
-// Dynamically retrieve current git commit hash
+// Dynamically retrieve current git commit hash and clean/dirty status
 let currentCommit = 'unknown';
+let gitStatusClean = true;
 try {
   currentCommit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  const statusOut = execSync('git status --porcelain', { encoding: 'utf8' }).trim();
+  gitStatusClean = statusOut.length === 0;
 } catch (e) {
-  console.warn('Could not determine git commit:', e.message);
+  console.warn('Could not determine git commit/status:', e.message);
 }
 
 function timestamp() {
@@ -156,6 +159,9 @@ async function runScenario({
     simulateFailure ? 'SIMULATE-FAILURE (Local stub server returns real HTTP 503 across all attempts)' :
     'NONE (Standard Production Pipeline against Mock Store)'
   }`);
+  if (simulateSlow || simulateFailure) {
+    console.log('NOTICE         : Response served by a LOCAL STUB (simulated), not the live store.');
+  }
   console.log('-'.repeat(80));
 
   let stubServer = null;
@@ -200,9 +206,10 @@ async function runScenario({
 
     scrapeResult.attempt_details.forEach((att, idx) => {
       const outcomeIcon = att.outcome === 'success' ? '✅' : '❌';
+      const firstLineErr = (att.error_message || '').split(/[\r\n]+/)[0].trim();
       console.log(
         `  Attempt #${att.attempt} [${att.duration_ms}ms] -> ${outcomeIcon} ${att.outcome.toUpperCase()}` +
-        (att.error_type ? ` | Error: [${att.error_type}] ${att.error_message}` : '')
+        (att.error_type ? ` | Error: [${att.error_type}] ${firstLineErr}` : '')
       );
       if (att.backoff_wait_ms && idx < scrapeResult.attempt_details.length - 1) {
         console.log(`  -> waiting ${(att.backoff_wait_ms / 1000).toFixed(1)} s before attempt ${att.attempt + 1}`);
@@ -220,7 +227,9 @@ async function runScenario({
       console.log(`Stock Status   : ${scrapeResult.data.stock_status} (${scrapeResult.data.stock_quantity ?? 'N/A'} units)`);
       console.log(`Agreement Check: PASSED (HTML-parsed ₹${scrapeResult.data.price} == Rendered text "${scrapeResult.data.rendered_price_text}")`);
     } else {
-      console.log(`Failure Reason : [${scrapeResult.error_type}] ${scrapeResult.error_message}`);
+      const firstLineReason = (scrapeResult.error_message || '').split(/[\r\n]+/)[0].trim();
+      console.log(`Resolved Price : N/A (Scrape Failed)`);
+      console.log(`Failure Reason : [${scrapeResult.error_type || 'UNKNOWN'}] ${firstLineReason}`);
     }
 
     // Database Write Decision
@@ -379,6 +388,8 @@ async function main() {
     metadata: {
       timestamp: new Date().toISOString(),
       commit_hash: currentCommit,
+      git_status: gitStatusClean ? 'clean' : 'dirty',
+      git_dirty: !gitStatusClean,
       mode: demoAll ? 'demo_all' : (simulateSlow ? 'simulate_slow' : (simulateFailure ? 'simulate_failure' : 'normal')),
       headed,
       no_db: noDb

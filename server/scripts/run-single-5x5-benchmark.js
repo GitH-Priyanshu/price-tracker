@@ -16,10 +16,13 @@ if (!fs.existsSync(evidenceDir)) {
 }
 
 let COMMIT_USED = 'unknown';
+let GIT_STATUS_CLEAN = true;
 try {
   COMMIT_USED = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  const statusOut = execSync('git status --porcelain', { encoding: 'utf8' }).trim();
+  GIT_STATUS_CLEAN = statusOut.length === 0;
 } catch (e) {
-  console.warn('Could not determine git commit:', e.message);
+  console.warn('Could not determine git commit/status:', e.message);
 }
 
 async function runSingle5x5() {
@@ -130,6 +133,8 @@ async function runSingle5x5() {
     metadata: {
       timestamp,
       commit_used: COMMIT_USED,
+      git_status: GIT_STATUS_CLEAN ? 'clean' : 'dirty',
+      git_dirty: !GIT_STATUS_CLEAN,
       total_runs: totalRuns,
       products_tested: products.length,
       runs_per_product: 5

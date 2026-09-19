@@ -66,14 +66,42 @@ const isDirectRun = process.argv[1] && (
   process.argv[1].endsWith('src/index.js')
 );
 
+let server = null;
 if (isDirectRun && process.env.NODE_ENV !== 'test') {
-  app.listen(config.port, () => {
+  server = app.listen(config.port, () => {
     console.log(`[Server] Price Tracker API running on port ${config.port}`);
     console.log(`[Config] Environment: ${config.nodeEnv}`);
     console.log(`[Config] Mock Store Base URL: ${config.storeBaseUrl}`);
     console.log(`[Config] Request Timeout: ${config.requestTimeoutMs}ms | Concurrency: ${config.scrapeConcurrency}`);
     console.log(`[Health] Endpoint ready at GET http://localhost:${config.port}/api/health`);
   });
+
+  const handleShutdown = async (signal) => {
+    console.log(`\n[Server] Received ${signal}. Initiating graceful shutdown...`);
+    if (server) {
+      server.close(async () => {
+        console.log('[Server] HTTP listener closed.');
+        try {
+          const { closeBrowser } = await import('./services/browserScraper.js');
+          await closeBrowser();
+          console.log('[Server] Shared Chromium browser closed.');
+        } catch (e) {
+          console.error('[Server] Error closing browser during shutdown:', e.message);
+        }
+        process.exit(0);
+      });
+
+      setTimeout(() => {
+        console.error('[Server] Graceful shutdown timed out after 10s. Forcing exit.');
+        process.exit(1);
+      }, 10000).unref();
+    } else {
+      process.exit(0);
+    }
+  };
+
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
 }
 
 export default app;

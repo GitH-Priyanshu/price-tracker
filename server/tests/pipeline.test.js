@@ -210,6 +210,26 @@ test('HTML DOM Parser Against Fixtures', async (t) => {
     assert.notEqual(parsed.price, 7, 'Must not truncate split-carrier digits to 7');
   });
 
+  await t.test('real captured HTML for product 510 with &nbsp; and zero-width spaces extracts 72045 (not 7)', () => {
+    const html510Path = path.resolve(__dirname, '../../docs/evidence/rejected/rejected_510_att3_1789831282797.html');
+    if (fs.existsSync(html510Path)) {
+      const html510 = fs.readFileSync(html510Path, 'utf8');
+      const parsed = parseProductHtml(html510, { store_product_id: '510', name: 'Meridian Touch Monitor Two', sku: 'MER-10510' });
+      assert.equal(parsed.price, 72045);
+      assert.equal(parsed.mrp, 76644);
+    }
+  });
+
+  await t.test('real captured HTML for product 985 with &nbsp; and zero-width spaces extracts 14474 (not 1)', () => {
+    const html985Path = path.resolve(__dirname, '../../docs/evidence/rejected/rejected_985_att3_1789831282797.html');
+    if (fs.existsSync(html985Path)) {
+      const html985 = fs.readFileSync(html985Path, 'utf8');
+      const parsed = parseProductHtml(html985, { store_product_id: '985', name: 'Ironwood Monitor Neo', sku: 'IRO-10985' });
+      assert.equal(parsed.price, 14474);
+      assert.equal(parsed.mrp, 15398);
+    }
+  });
+
   await t.test('structure shift / missing element DOM throws PARSE_ERROR', () => {
     assert.throws(() => parseProductHtml(structureShiftHtml, meta), (err) => {
       assert.equal(err.errorType, 'PARSE_ERROR');

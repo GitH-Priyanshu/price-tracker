@@ -56,8 +56,15 @@ export function parsePriceText(rawText) {
     }
   }
 
+  // 0. Decode HTML entities (e.g. &nbsp;, &#160;, &#xA0;)
+  let cleaned = rawText
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#160;/g, ' ')
+    .replace(/&#xA0;/gi, ' ')
+    .replace(/&[a-z0-9#]+;/gi, ' ');
+
   // 1. Normalize unicode digits to 0-9
-  let cleaned = normalizeUnicodeDigits(rawText);
+  cleaned = normalizeUnicodeDigits(cleaned);
 
   // 2. Strip zero-width characters and invisible noise
   cleaned = cleaned.replace(/[\u200B-\u200D\uFEFF]/g, '');

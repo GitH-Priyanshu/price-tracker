@@ -109,6 +109,7 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
 - **How it was detected**: User requirement review for queue reliability under concurrent tracking requests.
 - **How it was fixed**: Reserved a dedicated queue slot for scheduled cron cycles (`reservedCronSlots = 1`) in `ScrapeQueue`. Non-cron tracking requests are capped at `maxSize - reservedCronSlots`, guaranteeing scheduled cron cycles can always enqueue without being crowded out. Added automated test in `server/tests/api.test.js`.
 
-
-
-
+### Entry 21: Un-Decoded HTML Entities (`&nbsp;`) Causing Parser Digit Truncation
+- **What went wrong**: The mock store rendered product prices in `<b>` tags containing raw HTML entities and zero-width spaces, such as `<b class="vvce80p pv-q9">₹&nbsp;​1&nbsp;​4&nbsp;​,&nbsp;​4&nbsp;​7&nbsp;​4</b>` and `₹&nbsp;​7&nbsp;​2&nbsp;​,&nbsp;​0&nbsp;​4&nbsp;​5`. The HTML parser stripped HTML tags with regex, leaving literal `&nbsp;` substrings in the text (e.g. `"₹&nbsp;​1&nbsp;​4&nbsp;​,&nbsp;​4&nbsp;​7&nbsp;​4"`). When `parsePriceText` matched digits via `match(/(\d+(?:\.\d+)?)/)`, the regex captured only the single digit before the first `&` character (`1` or `7`), causing `PRICE_MISMATCH` rejections against rendered text (`₹14,474` and `₹72,045`).
+- **How it was detected**: Inspected raw rejected HTML files `rejected_510_att3_1789831282797.html` and `rejected_985_att3_1789831282797.html` in `docs/evidence/rejected/`.
+- **How it was fixed**: Added explicit HTML entity decoding (`&nbsp;`, `&#160;`, `&#xA0;`, `&[a-z0-9#]+;`) before digit normalization in `parsePriceText`, added a 500 ms text stability settling check in `browserScraper.js` before DOM/HTML capture, and added automated regression tests using the exact captured rejected HTML fixtures.

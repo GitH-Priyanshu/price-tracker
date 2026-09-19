@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "timestamp": "2026-09-19T16:16:41.834Z",
+    "commit_hash": "a9dedb148df314766623b809dc1af1e3c0ee8655",
+    "git_status": "dirty",
+    "git_dirty": true,
+    "mode": "demo_all",
+    "headed": false,
+    "no_db": true
+  },
+  "results": [
+    {
+      "scenario": "1. Normal Scrape (1st-try Success, Visible Window & Highlight)",
+      "product_id": "459",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 5182,
+      "scraped_price": 5995,
+      "rendered_price_text": "₹​5​,​9​9​5",
+      "error_type": null,
+      "error_message": null,
+      "db_written": false
+    },
+    {
+      "scenario": "2. Stalled Attempt with Exponential Backoff & Retry Recovery",
+      "product_id": "459",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 17159,
+      "scraped_price": 5995,
+      "rendered_price_text": "₹​5​ ​9​9​5",
+      "error_type": null,
+      "error_message": null,
+      "db_written": false
+    },
+    {
+      "scenario": "3. Upstream Outage / Failure Handled Without Corrupting Database",
+      "product_id": "459",
+      "outcome": "failed",
+      "attempts": 3,
+      "duration_ms": 3705,
+      "scraped_price": null,
+      "rendered_price_text": null,
+      "error_type": "HTTP_5XX",
+      "error_message": "Upstream server returned HTTP 503",
+      "db_written": false
+    }
+  ]
+}

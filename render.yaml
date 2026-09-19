@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: price-tracker-api
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SCRAPE_CONCURRENCY
+        value: 1
+      - key: REQUEST_TIMEOUT_MS
+        value: 12000
+      - key: MAX_ATTEMPTS
+        value: 3
+      - key: DEDUPE_WINDOW_MINUTES
+        value: 10
+      - key: MAX_TRACKED_PRODUCTS
+        value: 10
+      - key: SCRAPE_QUEUE_LIMIT
+        value: 10
+      - key: STORE_BASE_URL
+        value: https://demo.inelabteamdev.com
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: CRON_SECRET
+        sync: false

@@ -4,6 +4,9 @@ import config from '../config/index.js';
 let sharedBrowser = null;
 let sharedBrowserIsHeaded = false;
 
+let scrapeCount = 0;
+const MAX_SCRAPES_BEFORE_RECYCLE = 25;
+
 /**
  * Returns or initializes the shared Chromium browser instance.
  * @param {Object} [options]
@@ -13,7 +16,7 @@ let sharedBrowserIsHeaded = false;
 export async function getBrowserInstance(options = {}) {
   const { headed = false } = options;
 
-  if (sharedBrowser && (!sharedBrowser.isConnected() || sharedBrowserIsHeaded !== !!headed)) {
+  if (sharedBrowser && (!sharedBrowser.isConnected() || sharedBrowserIsHeaded !== !!headed || scrapeCount >= MAX_SCRAPES_BEFORE_RECYCLE)) {
     await closeBrowser();
   }
 
@@ -23,10 +26,14 @@ export async function getBrowserInstance(options = {}) {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        ...(process.platform === 'linux' ? ['--single-process'] : [])
       ]
     });
     sharedBrowserIsHeaded = !!headed;
+    scrapeCount = 0;
   }
 
   return sharedBrowser;
@@ -61,6 +68,7 @@ export async function closeBrowser() {
  * @returns {Promise<{ html: string, httpStatus: number, durationMs: number }>}
  */
 export async function scrapeProductPage(productUrl, options = {}) {
+  scrapeCount++;
   const timeoutMs = options.timeout || config.requestTimeoutMs;
   const startTime = Date.now();
   const browser = await getBrowserInstance({ headed: options.headed });
@@ -163,7 +171,8 @@ export async function scrapeProductPage(productUrl, options = {}) {
       revealClickError = 'Reveal button not found in DOM';
     }
 
-    // Wait for the visible price element to resolve and placeholder/loading text to clear
+    // Wait for the visible price element to resolve, placeholder to clear,
+    // and price text to remain stable (unchanged for about 500 ms) before capturing
     const elapsedSoFar = Date.now() - startTime;
     const waitTimeoutMs = Math.max(8000, Math.min(timeoutMs - elapsedSoFar, 16000));
 
@@ -171,17 +180,29 @@ export async function scrapeProductPage(productUrl, options = {}) {
       () => {
         const el = document.querySelector('.price-block, [class*="priceWrap"], [class*="pw-"]');
         if (!el) return false;
-        if (el.classList.contains('price-success')) return true;
-        const text = el.innerText;
-        return (
-          !text.includes('Price hidden') &&
-          !text.includes('Loading current price') &&
-          !text.includes('Retrying') &&
-          !text.includes('Hover')
-        );
+        const text = (el.innerText || '').trim();
+        if (
+          !text ||
+          text.includes('Price hidden') ||
+          text.includes('Loading current price') ||
+          text.includes('Retrying') ||
+          text.includes('Hover')
+        ) {
+          return false;
+        }
+
+        const now = Date.now();
+        if (window.__lastObservedPriceText !== text) {
+          window.__lastObservedPriceText = text;
+          window.__lastObservedPriceTime = now;
+          return false;
+        }
+
+        // Ensure price digits have settled and remained unchanged for at least 500ms
+        return (now - (window.__lastObservedPriceTime || now)) >= 500;
       },
-      { timeout: waitTimeoutMs }
-    );
+      { timeout: waitTimeoutMs, polling: 100 }
+    ).catch(() => {});
 
     // In headed mode: visually highlight resolved price and stock elements for screen recording clarity
     if (options.headed) {

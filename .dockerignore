@@ -1,0 +1,11 @@
+.env
+.env.*
+node_modules
+server/node_modules
+client/node_modules
+.git
+.gitignore
+docs/evidence
+*.log
+npm-debug.log*
+.tempmediaStorage
