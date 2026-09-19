@@ -9,8 +9,8 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const config = {
   // Database (Supabase)
-  supabaseUrl: process.env.SUPABASE_URL || '',
-  supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || '',
+  supabaseUrl: (process.env.SUPABASE_URL || '').trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, ''),
+  supabaseServiceKey: (process.env.SUPABASE_SERVICE_KEY || '').trim(),
 
   // Authentication & Security
   cronSecret: process.env.CRON_SECRET || '',

@@ -10,27 +10,39 @@ test('Configuration validation', async (t) => {
   });
 
   await t.test('validates required db options when requested', () => {
-    assert.throws(
-      () => {
-        validateConfig({ requireDb: true });
-      },
-      (err) => {
-        assert.match(err.message, /Missing required environment variables/);
-        return true;
-      }
-    );
+    const originalUrl = config.supabaseUrl;
+    config.supabaseUrl = '';
+    try {
+      assert.throws(
+        () => {
+          validateConfig({ requireDb: true });
+        },
+        (err) => {
+          assert.match(err.message, /Missing required environment variables/);
+          return true;
+        }
+      );
+    } finally {
+      config.supabaseUrl = originalUrl;
+    }
   });
 
   await t.test('validates required cron options when requested', () => {
-    assert.throws(
-      () => {
-        validateConfig({ requireCron: true });
-      },
-      (err) => {
-        assert.match(err.message, /CRON_SECRET/);
-        return true;
-      }
-    );
+    const originalSecret = config.cronSecret;
+    config.cronSecret = '';
+    try {
+      assert.throws(
+        () => {
+          validateConfig({ requireCron: true });
+        },
+        (err) => {
+          assert.match(err.message, /CRON_SECRET/);
+          return true;
+        }
+      );
+    } finally {
+      config.cronSecret = originalSecret;
+    }
   });
 });
 

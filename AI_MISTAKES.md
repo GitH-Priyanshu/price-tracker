@@ -23,3 +23,13 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
 - **What went wrong**: Naive numeric parsing (`parseFloat(text.replace('₹', ''))`) would produce `NaN` because the store deliberately intersperses zero-width spaces (`\u200B`), non-breaking spaces (`\xA0`), full-width Unicode numerals, and varying currency prefixes (`Rs.`, `₹`).
 - **How it was detected**: Observed `Sample result: visiblePriceText: '₹\u200b6\u200b,\u200b7\u200b2\u200b7'` and `Rs.\xA06,727.00` in Playwright DOM inspections.
 - **How it was fixed**: Designed a multi-stage sanitizer for the parser in Level B3: stripping invisible and non-breaking characters, normalizing full-width digits, identifying decimal vs thousand separators, and verifying `price > 0`.
+
+### Entry 5: PostgREST HEAD Requests Return 204 for Non-Existent Tables
+- **What went wrong**: In the initial `scripts/verify-db.js`, `supabase.from(table).select('*', { head: true })` was used to test table presence. PostgREST returns HTTP 204 No Content for HEAD requests without validating the table in the schema cache, producing a false positive that tables existed.
+- **How it was detected**: Running `tests/db.test.js` failed with error `PGRST205: Could not find the table 'public.products' in the schema cache`.
+- **How it was fixed**: Replaced `{ head: true }` with `.select('*').limit(1)`, forcing PostgREST to perform an actual schema-validated GET query that reliably fails when the table is not present.
+
+### Entry 6: ReferenceError in `verify-db.js` After Modifying Query Destructuring
+- **What went wrong**: While updating `scripts/verify-db.js` to execute `.select('*').limit(1)`, the variable `count` was removed from the destructured return object (`const { data, error }`), but the success logging statement on line 37 still referenced `count`. This caused the catch block to intercept a `ReferenceError: count is not defined` even though the Supabase query itself had succeeded.
+- **How it was detected**: The user ran `npm --prefix server run db:verify`, and the script reported `UNEXPECTED ERROR - count is not defined`.
+- **How it was fixed**: Updated the query call to `const { data, error, count } = await supabase.from(table).select('*', { count: 'exact' }).limit(1)`, properly restoring the `count` variable and confirming successful table access.
