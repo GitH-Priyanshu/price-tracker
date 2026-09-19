@@ -190,40 +190,43 @@ export function parseProductHtml(html, fallbackMeta = {}) {
 
   // 5. Extract the VISIBLE price element
   // The mock store renders real price in <output ...> or visible <span class="pv-*">
-  // while injecting decoy elements with style="display: none;"
+  // while injecting decoy elements (display: none), MRP (mr-*), Deal price (sl-*), and badge (bd-*)
   let priceText = null;
 
-  // Pattern A: Look for <output ...>...</output> tag (from layout.priceTag)
-  const outputMatch = html.match(/<output[^>]*>([\s\S]*?)<\/output>/i);
-  if (outputMatch) {
-    // Strip nested tags (<span>...</span>) to get inner text
-    priceText = outputMatch[1].replace(/<[^>]+>/g, '').trim();
-  }
+  // Strategy 1: Targeted container extraction by stripping non-active elements from .price-main
+  const priceMainMatch = html.match(/<div class="price-main"[^>]*>([\s\S]*?)<\/div>/i);
+  if (priceMainMatch) {
+    let inner = priceMainMatch[1];
+    // Strip display: none elements (decoys like .price-value and .amount)
+    inner = inner.replace(/<[^>]+style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+    // Strip MRP (strikethrough) elements (.mr-*)
+    inner = inner.replace(/<[^>]+class="[^"]*\bmr-[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+    // Strip Deal price elements (.sl-*)
+    inner = inner.replace(/<[^>]+class="[^"]*\bsl-[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+    // Strip discount badge elements (.bd-*)
+    inner = inner.replace(/<[^>]+class="[^"]*\bbd-[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+    // Strip transient status text like Updating…
+    inner = inner.replace(/<span[^>]*>[^<]*updating[^<]*<\/span>/gi, '');
 
-  // Pattern B: Look for unhidden pv-* class tag
-  if (!priceText) {
-    const pvMatch = html.match(/<([a-z0-9]+)[^>]*class="[^"]*pv-[^"]*"[^>]*>([\s\S]*?)<\/\1>/i);
-    if (pvMatch && !pvMatch[0].includes('display: none') && !pvMatch[0].includes('aria-hidden="true"')) {
-      priceText = pvMatch[2].replace(/<[^>]+>/g, '').trim();
+    const textOnly = inner.replace(/<[^>]+>/g, ' ').trim();
+    if (textOnly && (textOnly.includes('₹') || textOnly.includes('Rs') || /\d/.test(textOnly))) {
+      priceText = textOnly;
     }
   }
 
-  // Pattern C: Find all elements inside .price-main that are NOT hidden
+  // Strategy 2: Look for <output ...>...</output> tag
   if (!priceText) {
-    const priceMainMatch = html.match(/<div class="price-main"[^>]*>([\s\S]*?)<\/div>/i);
-    if (priceMainMatch) {
-      const inner = priceMainMatch[1];
-      // remove display: none elements
-      const stripped = inner.replace(/<[^>]+style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
-      // remove mr-* (mrp) elements
-      const noMrp = stripped.replace(/<[^>]+class="[^"]*mr-[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
-      // remove bd-* (discount badge) elements
-      const noBadge = noMrp.replace(/<[^>]+class="[^"]*bd-[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
-      
-      const textOnly = noBadge.replace(/<[^>]+>/g, ' ').trim();
-      if (textOnly) {
-        priceText = textOnly;
-      }
+    const outputMatch = html.match(/<output[^>]*>([\s\S]*?)<\/output>/i);
+    if (outputMatch) {
+      priceText = outputMatch[1].replace(/<[^>]+>/g, '').trim();
+    }
+  }
+
+  // Strategy 3: Look for unhidden pv-* class tag
+  if (!priceText) {
+    const pvMatch = html.match(/<(?:output|span|div)[^>]*class="[^"]*\bpv-[^"]*"[^>]*>([\s\S]*?)<\/(?:output|span|div)>/i);
+    if (pvMatch && !pvMatch[0].includes('display: none') && !pvMatch[0].includes('aria-hidden="true"')) {
+      priceText = pvMatch[1].replace(/<[^>]+>/g, '').trim();
     }
   }
 

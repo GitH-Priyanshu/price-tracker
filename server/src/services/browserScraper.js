@@ -68,6 +68,18 @@ export async function scrapeProductPage(productUrl, options = {}) {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
   });
 
+  // Dismiss cookie modal / overlay by clicking the real accept button as a user would
+  // Selector identified from DOM snapshot: button.btn.btn-primary[aria-label="Accept cookies"]
+  await context.addInitScript(() => {
+    const observer = new MutationObserver(() => {
+      const acceptBtn = document.querySelector('.cookie-overlay button[aria-label="Accept cookies"], .cookie-actions button.btn-primary');
+      if (acceptBtn) {
+        acceptBtn.click();
+      }
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  });
+
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
 
@@ -86,17 +98,16 @@ export async function scrapeProductPage(productUrl, options = {}) {
       return { html, httpStatus, durationMs: Date.now() - startTime };
     }
 
-    // Dismiss cookie modal if present
+    // Explicitly click real accept button if present in initial DOM
     try {
-      const consentBtn = await page.waitForSelector(
-        'button:has-text("Accept"), button:has-text("Got it"), .cookie-consent button',
-        { timeout: 1200 }
+      const consentBtn = await page.$(
+        '.cookie-overlay button[aria-label="Accept cookies"], .cookie-actions button.btn-primary, button[aria-label="Accept cookies"]'
       );
       if (consentBtn) {
         await consentBtn.click();
       }
     } catch {
-      // Modal not present, proceed
+      // Modal not present yet, proceed
     }
 
     // Wait for price container
@@ -108,34 +119,33 @@ export async function scrapeProductPage(productUrl, options = {}) {
     // Simulate mouse movement inside priceBlock to satisfy minMoves: 8, minDwellMs: 600
     const box = await priceBlock.boundingBox();
     if (box) {
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 15; i++) {
         await page.mouse.move(box.x + 25 + (i % 4) * 15, box.y + 20 + (i % 3) * 6);
         await new Promise((r) => setTimeout(r, 65));
       }
     }
 
-    // Check for Reveal Price button and click once enabled
+    // Click accept cookies if it popped up during dwell
+    try {
+      const overlayBtn = await page.$('.cookie-overlay button[aria-label="Accept cookies"]');
+      if (overlayBtn) await overlayBtn.click();
+    } catch {}
+
+    // Wait for Reveal Price button to become enabled before clicking
+    try {
+      await page.waitForSelector('button[aria-label="Reveal price"]:not([disabled])', { timeout: 3000 });
+    } catch {}
+
     const revealBtn = await page.$('button[aria-label="Reveal price"], button:has-text("Reveal price")');
     if (revealBtn) {
-      const isDisabled = await revealBtn.isDisabled();
-      if (isDisabled) {
-        // Add extra dwell movements if button still disabled
-        if (box) {
-          for (let j = 0; j < 8; j++) {
-            await page.mouse.move(box.x + 30 + j * 5, box.y + 25 + (j % 2) * 5);
-            await new Promise((r) => setTimeout(r, 80));
-          }
-        }
-      }
       try {
         await revealBtn.click({ timeout: 2000 });
       } catch {
-        // If already triggered by hover, click might not be required
+        // If already triggered by dwell, click might not be required
       }
     }
 
     // Wait for the visible price element to resolve and placeholder/loading text to clear
-    // Use remaining attempt budget (up to 16s headroom) instead of a tight 10s ceiling
     const elapsedSoFar = Date.now() - startTime;
     const waitTimeoutMs = Math.max(8000, Math.min(timeoutMs - elapsedSoFar, 16000));
 
@@ -143,13 +153,13 @@ export async function scrapeProductPage(productUrl, options = {}) {
       () => {
         const el = document.querySelector('.price-block, [class*="priceWrap"], [class*="pw-"]');
         if (!el) return false;
+        if (el.classList.contains('price-success')) return true;
         const text = el.innerText;
         return (
           !text.includes('Price hidden') &&
           !text.includes('Loading current price') &&
           !text.includes('Retrying') &&
-          !text.includes('Hover') &&
-          !text.includes('Updating')
+          !text.includes('Hover')
         );
       },
       { timeout: waitTimeoutMs }

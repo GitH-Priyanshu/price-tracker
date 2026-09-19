@@ -1,0 +1,57 @@
+{
+  "timedOut": false,
+  "cookieOverlayPresentAtTimeout": false,
+  "priceBlockTextAtTimeout": "₹8,331\n₹​4​,​2​4​9\n49% off\nGet it by Mon, 21 Sept\n 9.5k ratings\nHURRY, JUST 44 LEFT\nSold by Qui​llon Direct\nLoaded in 2 attempts\nREFRESH PRICE",
+  "priceBlockClasses": "price-block price-success pw-m4",
+  "consoleLogsCount": 1,
+  "consoleErrors": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)"
+    }
+  ],
+  "networkErrors": [],
+  "networkResponsesCount": 11,
+  "recentResponses": [
+    {
+      "url": "https://demo.inelabteamdev.com/assets/index-DrctpSuy.css",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/assets/index-B9UiQq4X.js",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/layout",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/product/120",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/challenge",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/session",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/products/120/price",
+      "status": 500
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/challenge",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/session",
+      "status": 200
+    },
+    {
+      "url": "https://demo.inelabteamdev.com/api/products/120/price",
+      "status": 200
+    }
+  ]
+}

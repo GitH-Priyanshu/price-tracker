@@ -123,6 +123,23 @@ test('HTML DOM Parser Against Fixtures', async (t) => {
     assert.equal(parsed.stock_quantity, 100);
   });
 
+  await t.test('ignores Deal price (sl-*) and decoys to extract active price from split-carrier span', () => {
+    const htmlWithDealPrice = `
+      <h1>Domus Sling Plus</h1>
+      <div class="price-main">
+        <span class="price-value" style="display: none;" aria-hidden="true">₹99,999</span>
+        <span class="mr-m4" style="text-decoration: line-through;">₹21,532</span>
+        <span class="sl-m4">Deal price ₹16,795</span>
+        <span class="v0 pv-m4" style="font-size: 2.4rem;"><span>₹​</span><span>1​</span><span>2​</span><span>,​</span><span>0​</span><span>5​</span><span>8​</span></span>
+        <span class="bd-m4">44% off</span>
+      </div>
+      <span class="stock-badge in-stock">In stock · 50 left</span>
+    `;
+    const parsed = parseProductHtml(htmlWithDealPrice, meta);
+    assert.equal(parsed.price, 12058); // Must be real selling price 12058, NOT deal price 16795
+    assert.equal(parsed.stock_quantity, 50);
+  });
+
   await t.test('loading/placeholder DOM throws PLACEHOLDER error', () => {
     assert.throws(() => parseProductHtml(placeholderHtml, meta), (err) => {
       assert.equal(err.errorType, 'PLACEHOLDER');

@@ -1,0 +1,98 @@
+[
+  {
+    "runIndex": 1,
+    "productId": "120",
+    "productName": "Auralite Docking Station Mini",
+    "durationMs": 34811,
+    "screenshotFile": "stall_run_1_prod_120_screenshot.png",
+    "domFile": "stall_run_1_prod_120_dom.html",
+    "cookieOverlay": {
+      "present": true,
+      "display": "block",
+      "visibility": "visible",
+      "zIndex": "50",
+      "pointerEvents": "auto",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    "priceElement": {
+      "present": true,
+      "className": "price-block price-idle pw-m4",
+      "innerText": "Price hidden\n\nCheck the current price and availability.\n\nREVEAL PRICE",
+      "buttonPresent": true,
+      "buttonDisabled": false,
+      "buttonText": "REVEAL PRICE"
+    },
+    "consoleErrors": [],
+    "networkFailures": [],
+    "httpErrors": []
+  },
+  {
+    "runIndex": 3,
+    "productId": "329",
+    "productName": "Cobalt Ultrabook Lite",
+    "durationMs": 34644,
+    "screenshotFile": "stall_run_3_prod_329_screenshot.png",
+    "domFile": "stall_run_3_prod_329_dom.html",
+    "cookieOverlay": {
+      "present": true,
+      "display": "block",
+      "visibility": "visible",
+      "zIndex": "50",
+      "pointerEvents": "auto",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    "priceElement": {
+      "present": true,
+      "className": "price-block price-idle pw-m4",
+      "innerText": "Price hidden\n\nCheck the current price and availability.\n\nREVEAL PRICE",
+      "buttonPresent": true,
+      "buttonDisabled": false,
+      "buttonText": "REVEAL PRICE"
+    },
+    "consoleErrors": [],
+    "networkFailures": [],
+    "httpErrors": []
+  },
+  {
+    "runIndex": 4,
+    "productId": "905",
+    "productName": "Vista Monitor Studio",
+    "durationMs": 32696,
+    "screenshotFile": "stall_run_4_prod_905_screenshot.png",
+    "domFile": "stall_run_4_prod_905_dom.html",
+    "cookieOverlay": {
+      "present": true,
+      "display": "block",
+      "visibility": "visible",
+      "zIndex": "50",
+      "pointerEvents": "auto",
+      "rect": {
+        "top": 0,
+        "left": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    "priceElement": {
+      "present": true,
+      "className": "price-block price-success pw-m4",
+      "innerText": "₹78,671\n₹​7​5​,​0​2​4\n31% off\nUpdating…\nGet it by Mon, 28 Sept\n 27.8k ratings\nSELLING FAST — 173 LEFT\nSold by Mar​lowe & Co\nLoaded in 1 attempt\nREFRESH PRICE",
+      "buttonPresent": true,
+      "buttonDisabled": false,
+      "buttonText": "REFRESH PRICE"
+    },
+    "consoleErrors": [],
+    "networkFailures": [],
+    "httpErrors": []
+  }
+]

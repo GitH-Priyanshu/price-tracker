@@ -20,8 +20,8 @@ const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   storeBaseUrl: process.env.STORE_BASE_URL || 'https://demo.inelabteamdev.com',
 
-  // Scraping Budgets & Concurrency (Evidence-based: p95 reveal is 17.4s; 18s cuts off deadlocks while allowing p95)
-  requestTimeoutMs: parseInt(process.env.REQUEST_TIMEOUT_MS || '18000', 10),
+  // Scraping Budgets & Concurrency (Evidence-based: all successful reveals occur in <= 5.2s; 12s cuts stalled deadlocks early while keeping worst-case 3-attempt cycle under 60s)
+  requestTimeoutMs: parseInt(process.env.REQUEST_TIMEOUT_MS || '12000', 10),
   maxAttempts: parseInt(process.env.MAX_ATTEMPTS || '3', 10),
   scrapeConcurrency: parseInt(process.env.SCRAPE_CONCURRENCY || '1', 10),
   dedupeWindowMinutes: parseInt(process.env.DEDUPE_WINDOW_MINUTES || '10', 10),

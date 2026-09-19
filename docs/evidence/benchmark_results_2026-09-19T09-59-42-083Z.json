@@ -1,0 +1,492 @@
+{
+  "benchmark_metadata": {
+    "timestamp": "2026-09-19T09-59-42-083Z",
+    "total_runs": 20,
+    "mode": "headless",
+    "concurrency": 1,
+    "products_tested": 5
+  },
+  "summary_statistics": {
+    "total_runs": 20,
+    "first_try_success_count": 15,
+    "retried_success_count": 5,
+    "failed_count": 0,
+    "stalled_beyond_10s_count": 5,
+    "first_try_success_rate_percent": 75,
+    "overall_success_rate_percent": 100,
+    "duration_min_ms": 1867,
+    "duration_median_ms": 3460,
+    "duration_avg_ms": 8119,
+    "duration_p90_ms": 23849,
+    "duration_p95_ms": 23860,
+    "duration_max_ms": 24016,
+    "peak_rss_mb": 110
+  },
+  "runs": [
+    {
+      "run_number": 1,
+      "product_id": "510",
+      "product_name": "Meridian Touch Monitor Two",
+      "product_sku": "MER-10510",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 5152,
+      "price_inr": 61255,
+      "stock_status": "in_stock",
+      "stock_quantity": 139,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T09:59:47.463Z",
+          "outcome": "success",
+          "duration_ms": 5152,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 2,
+      "product_id": "985",
+      "product_name": "Ironwood Monitor Neo",
+      "product_sku": "IRO-10985",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 23849,
+      "price_inr": 12058,
+      "stock_status": "in_stock",
+      "stock_quantity": 58,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:00:07.055Z",
+          "outcome": "failed",
+          "error_type": "TIMEOUT",
+          "error_message": "page.waitForFunction: Timeout 18000ms exceeded.",
+          "duration_ms": 19592,
+          "http_status": null
+        },
+        {
+          "attempt": 2,
+          "at": "2026-09-19T10:00:11.312Z",
+          "outcome": "success",
+          "duration_ms": 2961,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 3,
+      "product_id": "989",
+      "product_name": "Vista Pro Display Neo",
+      "product_sku": "VIS-10989",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 22890,
+      "price_inr": 47810,
+      "stock_status": "in_stock",
+      "stock_quantity": 167,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:00:30.815Z",
+          "outcome": "failed",
+          "error_type": "TIMEOUT",
+          "error_message": "page.waitForFunction: Timeout 18000ms exceeded.",
+          "duration_ms": 19502,
+          "http_status": null
+        },
+        {
+          "attempt": 2,
+          "at": "2026-09-19T10:00:34.203Z",
+          "outcome": "success",
+          "duration_ms": 2306,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 4,
+      "product_id": "520",
+      "product_name": "Vantablack Docking Station Two",
+      "product_sku": "VAN-10520",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 3479,
+      "price_inr": 7921,
+      "stock_status": "in_stock",
+      "stock_quantity": 170,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:00:37.682Z",
+          "outcome": "success",
+          "duration_ms": 3479,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 5,
+      "product_id": "383",
+      "product_name": "Ironwood Tote Lite",
+      "product_sku": "IRO-10383",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 1867,
+      "price_inr": 10361,
+      "stock_status": "out_of_stock",
+      "stock_quantity": 0,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:00:39.549Z",
+          "outcome": "success",
+          "duration_ms": 1867,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 6,
+      "product_id": "510",
+      "product_name": "Meridian Touch Monitor Two",
+      "product_sku": "MER-10510",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 24016,
+      "price_inr": 75896,
+      "stock_status": "in_stock",
+      "stock_quantity": 139,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:00:59.044Z",
+          "outcome": "failed",
+          "error_type": "TIMEOUT",
+          "error_message": "page.waitForFunction: Timeout 18000ms exceeded.",
+          "duration_ms": 19495,
+          "http_status": null
+        },
+        {
+          "attempt": 2,
+          "at": "2026-09-19T10:01:03.565Z",
+          "outcome": "success",
+          "duration_ms": 3141,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 7,
+      "product_id": "985",
+      "product_name": "Ironwood Monitor Neo",
+      "product_sku": "IRO-10985",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2882,
+      "price_inr": 15784,
+      "stock_status": "in_stock",
+      "stock_quantity": 58,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:06.447Z",
+          "outcome": "success",
+          "duration_ms": 2882,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 8,
+      "product_id": "989",
+      "product_name": "Vista Pro Display Neo",
+      "product_sku": "VIS-10989",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2398,
+      "price_inr": 74943,
+      "stock_status": "in_stock",
+      "stock_quantity": 167,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:08.845Z",
+          "outcome": "success",
+          "duration_ms": 2397,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 9,
+      "product_id": "520",
+      "product_name": "Vantablack Docking Station Two",
+      "product_sku": "VAN-10520",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2351,
+      "price_inr": 7921,
+      "stock_status": "in_stock",
+      "stock_quantity": 170,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:11.197Z",
+          "outcome": "success",
+          "duration_ms": 2351,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 10,
+      "product_id": "383",
+      "product_name": "Ironwood Tote Lite",
+      "product_sku": "IRO-10383",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2302,
+      "price_inr": 10361,
+      "stock_status": "out_of_stock",
+      "stock_quantity": 0,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:13.499Z",
+          "outcome": "success",
+          "duration_ms": 2302,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 11,
+      "product_id": "510",
+      "product_name": "Meridian Touch Monitor Two",
+      "product_sku": "MER-10510",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2417,
+      "price_inr": 61255,
+      "stock_status": "in_stock",
+      "stock_quantity": 139,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:15.917Z",
+          "outcome": "success",
+          "duration_ms": 2417,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 12,
+      "product_id": "985",
+      "product_name": "Ironwood Monitor Neo",
+      "product_sku": "IRO-10985",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 3709,
+      "price_inr": 12058,
+      "stock_status": "in_stock",
+      "stock_quantity": 58,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:19.627Z",
+          "outcome": "success",
+          "duration_ms": 3709,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 13,
+      "product_id": "989",
+      "product_name": "Vista Pro Display Neo",
+      "product_sku": "VIS-10989",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 23852,
+      "price_inr": 74943,
+      "stock_status": "in_stock",
+      "stock_quantity": 167,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:39.175Z",
+          "outcome": "failed",
+          "error_type": "TIMEOUT",
+          "error_message": "page.waitForFunction: Timeout 18000ms exceeded.",
+          "duration_ms": 19547,
+          "http_status": null
+        },
+        {
+          "attempt": 2,
+          "at": "2026-09-19T10:01:43.480Z",
+          "outcome": "success",
+          "duration_ms": 2942,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 14,
+      "product_id": "520",
+      "product_name": "Vantablack Docking Station Two",
+      "product_sku": "VAN-10520",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 3441,
+      "price_inr": 7921,
+      "stock_status": "in_stock",
+      "stock_quantity": 170,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:46.921Z",
+          "outcome": "success",
+          "duration_ms": 3441,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 15,
+      "product_id": "383",
+      "product_name": "Ironwood Tote Lite",
+      "product_sku": "IRO-10383",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 3555,
+      "price_inr": 10361,
+      "stock_status": "out_of_stock",
+      "stock_quantity": 0,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:50.476Z",
+          "outcome": "success",
+          "duration_ms": 3555,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 16,
+      "product_id": "510",
+      "product_name": "Meridian Touch Monitor Two",
+      "product_sku": "MER-10510",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2233,
+      "price_inr": 61255,
+      "stock_status": "in_stock",
+      "stock_quantity": 139,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:52.709Z",
+          "outcome": "success",
+          "duration_ms": 2233,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 17,
+      "product_id": "985",
+      "product_name": "Ironwood Monitor Neo",
+      "product_sku": "IRO-10985",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 1893,
+      "price_inr": 12058,
+      "stock_status": "in_stock",
+      "stock_quantity": 58,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:54.602Z",
+          "outcome": "success",
+          "duration_ms": 1893,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 18,
+      "product_id": "989",
+      "product_name": "Vista Pro Display Neo",
+      "product_sku": "VIS-10989",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 2026,
+      "price_inr": 74943,
+      "stock_status": "in_stock",
+      "stock_quantity": 167,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:01:56.628Z",
+          "outcome": "success",
+          "duration_ms": 2026,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 19,
+      "product_id": "520",
+      "product_name": "Vantablack Docking Station Two",
+      "product_sku": "VAN-10520",
+      "outcome": "success",
+      "attempts": 1,
+      "duration_ms": 4350,
+      "price_inr": 7921,
+      "stock_status": "in_stock",
+      "stock_quantity": 170,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:02:00.979Z",
+          "outcome": "success",
+          "duration_ms": 4350,
+          "http_status": 200
+        }
+      ]
+    },
+    {
+      "run_number": 20,
+      "product_id": "383",
+      "product_name": "Ironwood Tote Lite",
+      "product_sku": "IRO-10383",
+      "outcome": "retried",
+      "attempts": 2,
+      "duration_ms": 23725,
+      "price_inr": 12821,
+      "stock_status": "out_of_stock",
+      "stock_quantity": 0,
+      "attempt_details": [
+        {
+          "attempt": 1,
+          "at": "2026-09-19T10:02:20.494Z",
+          "outcome": "failed",
+          "error_type": "TIMEOUT",
+          "error_message": "page.waitForFunction: Timeout 18000ms exceeded.",
+          "duration_ms": 19514,
+          "http_status": null
+        },
+        {
+          "attempt": 2,
+          "at": "2026-09-19T10:02:24.705Z",
+          "outcome": "success",
+          "duration_ms": 3049,
+          "http_status": 200
+        }
+      ]
+    }
+  ]
+}

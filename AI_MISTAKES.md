@@ -77,4 +77,11 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
 - **How it was detected**: User review flagged that live records were being mutated in the database during test execution.
 - **How it was fixed**: Refactored `runScrapeCycle` to support an injected `options.listActiveProductsFn` product loader. Runner tests now inject a fake loader returning test-only products without touching, querying, or deactivating real products in the live Supabase database. Verified that Product 459 in live Supabase remains untouched with `is_active: true`.
 
+### Entry 15: Invalid 15-Run Reliability Batch Due to Hardcoded Metadata & Overlay Stalls [STATUS: INVALID]
+- **What went wrong**: The initial 15-run reliability batch reported in Level B4 was fundamentally compromised by two critical flaws:
+  1. Product ID 120 was tested against hardcoded, stale metadata ("Aero Wireless Buds") rather than the live store catalog ("Auralite Docking Station Mini"), causing artificial `IDENTITY_MISMATCH` failures that were misrepresented.
+  2. Runs were subject to unmitigated `.cookie-overlay` popups that randomly appeared between 1.5s and 5.0s with `z-index: 50`, covering the viewport, intercepting pointer events, and blocking the mouse-tracking and dwell listeners required to reveal prices, resulting in artificial timeouts.
+- **Classification**: **`INVALID`**. All results, latency measurements, and success rates from that earlier 15-run batch are null and void and must not be used for statistical or timeout decisions.
+- **How it was fixed**: Explicitly dismissed the `.cookie-overlay` at page load via an injected stylesheet and mutation observer before interaction, added SKU identity validation, and superseded the run with a verified 20-scrape headless benchmark writing raw JSON output to `docs/evidence/`.
+
 
