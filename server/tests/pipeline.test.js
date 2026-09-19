@@ -198,6 +198,18 @@ test('HTML DOM Parser Against Fixtures', async (t) => {
     assert.equal(parsed.mrp, 15000);
   });
 
+  await t.test('reproduced split-carrier HTML extracts full price (71819) and avoids single-digit 7 truncation', () => {
+    const reproPath = path.resolve(__dirname, '../../docs/evidence/rejected/reproduced_split_carrier_7.html');
+    const reproHtml = fs.readFileSync(reproPath, 'utf8');
+    const parsed = parseProductHtml(reproHtml, { store_product_id: '989' });
+    assert.equal(parsed.store_product_id, '989');
+    assert.equal(parsed.name, 'Vista Pro Display Neo');
+    assert.equal(parsed.sku, 'VIS-10989');
+    assert.equal(parsed.price, 71819);
+    assert.equal(parsed.mrp, 170998);
+    assert.notEqual(parsed.price, 7, 'Must not truncate split-carrier digits to 7');
+  });
+
   await t.test('structure shift / missing element DOM throws PARSE_ERROR', () => {
     assert.throws(() => parseProductHtml(structureShiftHtml, meta), (err) => {
       assert.equal(err.errorType, 'PARSE_ERROR');
@@ -444,6 +456,38 @@ test('ScrapeProduct Pipeline Orchestration (Mocked Scraper)', async (t) => {
     assert.match(result.attempt_details[0].error_message, /Plausibility Failure/);
     assert.equal(result.attempt_details[1].outcome, 'success');
     assert.equal(result.data.price, 6727);
+  });
+
+  await t.test('fails attempt as PRICE_MISMATCH and retries when parsed HTML price disagrees with rendered element text', async () => {
+    let callCount = 0;
+    const mockScraper = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          html: normalHtml, // parsed price is 6727
+          renderedPriceText: '₹71,819', // rendered text says 71819 -> mismatch!
+          httpStatus: 200
+        };
+      }
+      return {
+        html: normalHtml,
+        renderedPriceText: '₹6,727', // agreed!
+        httpStatus: 200
+      };
+    };
+
+    const result = await scrapeProduct(product, {
+      scraperFn: mockScraper,
+      maxAttempts: 2,
+      timeoutMs: 500
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.attempts, 2);
+    assert.equal(result.attempt_details[0].outcome, 'failed');
+    assert.equal(result.attempt_details[0].error_type, 'PRICE_MISMATCH');
+    assert.match(result.attempt_details[0].error_message, /PRICE_MISMATCH/);
+    assert.equal(result.attempt_details[1].outcome, 'success');
   });
 });
 

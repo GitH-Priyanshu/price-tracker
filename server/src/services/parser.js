@@ -105,6 +105,12 @@ export function parsePriceText(rawText) {
     }
   }
 
+  // Normalize single-spaced digits caused by split-carrier tags (e.g. "7 1 , 8 1 9" -> "71,819")
+  cleaned = cleaned.replace(/(\d)\s*,\s*(\d)/g, '$1,$2');
+  while (/(\d)\s+(\d)/.test(cleaned)) {
+    cleaned = cleaned.replace(/(\d)\s+(\d)/g, '$1$2');
+  }
+
   // Normalize spaced thousands (e.g. "7 921" -> "7921")
   cleaned = cleaned.replace(/(\d+)\s+(\d{3})(?!\d)/g, '$1$2');
 
@@ -217,7 +223,11 @@ export function parseProductHtml(html, fallbackMeta = {}) {
     // Strip transient status text like Updating…
     inner = inner.replace(/<span[^>]*>[^<]*updating[^<]*<\/span>/gi, '');
 
-    const textOnly = inner.replace(/<[^>]+>/g, ' ').trim();
+    // Strip block closing tags with space, but strip inline tags without space so split-carriers aren't spaced
+    const textOnly = inner
+      .replace(/<\/(?:div|p|h\d|section|article)>/gi, ' ')
+      .replace(/<[^>]+>/g, '')
+      .trim();
     if (textOnly && (textOnly.includes('₹') || textOnly.includes('Rs') || /\d/.test(textOnly))) {
       priceText = textOnly;
     }

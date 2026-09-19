@@ -1,7 +1,13 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import config from '../config/index.js';
 import { scrapeProductPage } from './browserScraper.js';
-import { parseProductHtml, ParseError } from './parser.js';
+import { parseProductHtml, parsePriceText, ParseError } from './parser.js';
 import { validateScrapedProduct, ValidationError } from './validator.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // In-memory catalog cache with 10-minute TTL for search queries
 let catalogCache = {
@@ -121,10 +127,11 @@ export async function scrapeProduct(product, options = {}) {
 
     const attemptStart = Date.now();
     let currentHttpStatus = null;
+    let scrapeResult = null;
 
     try {
       // 1. Fetch rendered DOM
-      const scrapeResult = await scraper(targetUrl, {
+      scrapeResult = await scraper(targetUrl, {
         timeout: timeoutMs,
         headed: options.headed
       });
@@ -139,6 +146,26 @@ export async function scrapeProduct(product, options = {}) {
 
       // 2. Parse HTML
       const parsedData = parseProductHtml(scrapeResult.html, product);
+
+      // 2b. Same-state Active Price Agreement Check (reads active price twice in same page state)
+      if (scrapeResult.renderedPriceText) {
+        let renderedPrice = null;
+        try {
+          renderedPrice = parsePriceText(scrapeResult.renderedPriceText);
+        } catch (pErr) {
+          throw new ParseError(
+            `PRICE_MISMATCH: Failed to parse rendered price text "${scrapeResult.renderedPriceText}": ${pErr.message}`,
+            'PRICE_MISMATCH'
+          );
+        }
+
+        if (parsedData.price !== renderedPrice) {
+          throw new ParseError(
+            `PRICE_MISMATCH: Parsed price (₹${parsedData.price}) does not match rendered element text price (₹${renderedPrice}) in same page state`,
+            'PRICE_MISMATCH'
+          );
+        }
+      }
 
       // 3. Validate
       validateScrapedProduct(parsedData, product);
@@ -155,7 +182,11 @@ export async function scrapeProduct(product, options = {}) {
       return {
         success: true,
         attempts: attempt,
-        data: parsedData,
+        data: {
+          ...parsedData,
+          rendered_price_text: scrapeResult?.renderedPriceText || null,
+          all_dom_price_elements: scrapeResult?.allDomPriceElements || []
+        },
         http_status: currentHttpStatus,
         duration_ms: Date.now() - overallStart,
         attempt_details: attemptDetails
@@ -164,6 +195,28 @@ export async function scrapeProduct(product, options = {}) {
       const duration = Date.now() - attemptStart;
       const errorType = classifyError(err, currentHttpStatus);
       const errorMessage = err.message || 'Unknown scrape failure';
+
+      // Save raw HTML of every attempt rejected by validation or agreement check to docs/evidence/rejected/
+      if (
+        scrapeResult?.html &&
+        (errorType === 'VALIDATION' ||
+         errorType === 'PRICE_MISMATCH' ||
+         errorMessage.includes('Plausibility Failure') ||
+         errorMessage.includes('PRICE_MISMATCH'))
+      ) {
+        try {
+          const rejectedDir = path.resolve(__dirname, '../../../docs/evidence/rejected');
+          if (!fs.existsSync(rejectedDir)) {
+            fs.mkdirSync(rejectedDir, { recursive: true });
+          }
+          const safeId = String(product.store_product_id || product.id || 'unknown');
+          const filename = `rejected_${safeId}_att${attempt}_${Date.now()}.html`;
+          fs.writeFileSync(path.join(rejectedDir, filename), scrapeResult.html, 'utf8');
+          console.warn(`[StoreClient] 💾 Saved rejected attempt HTML: docs/evidence/rejected/${filename}`);
+        } catch (saveErr) {
+          console.warn('[StoreClient] Failed to save rejected HTML:', saveErr.message);
+        }
+      }
 
       lastErrorType = errorType;
       lastErrorMessage = errorMessage;

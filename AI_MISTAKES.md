@@ -89,5 +89,26 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
 - **How it was detected**: User analysis of the benchmark results identified that valid price/MRP ratios extend down to `0.314`, whereas parser truncations (e.g. ₹7, ₹7.92, ₹8.59) produce ratios $\le 0.0007$ (0.07%).
 - **How it was fixed**: Loosened the validator plausibility bounds to minimum `0.10` (10% of MRP) and maximum `2.00` (200% of MRP). This reliably filters out single-digit and truncated parser errors while providing ample headroom for genuine deep sales and dynamic surge pricing without biasing stored prices upward. Updated validator logic and unit tests accordingly.
 
+### Entry 17: Product Identity Conflation in Benchmark Evidence Reporting
+- **What went wrong**: In reporting on benchmark `single_5x5_benchmark_2026-09-19T14-00-55-025Z.json`, Product 989 ("Vista Pro Display Neo", SKU `VIS-10989`) was misidentified in the narrative text as "Aero Soundbar Mini", conflating its identity with another catalog item.
+- **How it was detected**: User review flagged contradiction between raw JSON content and narrative report.
+- **How it was fixed**: Established strict rule to copy values directly from raw JSON files without paraphrasing.
+
+### Entry 18: Parser Single-Digit Truncation ("7") on Split-Carrier Numerals
+- **What went wrong**: The mock store renders prices using split-carrier spans (e.g. `<span>7</span><span>1</span><span>,</span><span>8</span><span>1</span><span>9</span>`). `parseProductHtml` stripped tags using `.replace(/<[^>]+>/g, ' ')`, introducing spaces between individual digits (`"7 1 , 8 1 9"`). `parsePriceText` matched the first whitespace-bounded group, extracting just `7` instead of `71819`.
+- **How it was detected**: Plausibility validation rejected `price: 7` against MRP `170998` (ratio 0.00004).
+- **How it was fixed**: Refactored tag stripping in `server/src/services/parser.js` to strip inline tags (`span`, `b`, `i`, `font`) without inserting spaces, and added whitespace-separated digit collapsing (`while (/(\d)\s+(\d)/.test(cleaned))`). Added reproduction fixture `docs/evidence/rejected/reproduced_split_carrier_7.html` and automated unit tests.
+
+### Entry 19: Discrepancy Between Scraped Price and DOM Text Due to Secondary Navigation
+- **What went wrong**: Benchmark script `run-single-5x5-benchmark.js` executed `scrapeProduct` (obtaining `scraped_price`), and then immediately opened a second, independent browser context and page navigation to record `all_dom_price_elements` (`visible_dom_text`). Because the mock store dynamically rotates prices across sessions, the second visit loaded a different price (e.g. `71819`) than the first scrape (e.g. `53691` in run 1, `70491` in run 4), creating an apparent mismatch between scraped price and reported DOM text.
+- **How it was detected**: User observed in `single_5x5_benchmark_...json` that `scraped_price` differed from `visible_dom_text` for Product 989 in runs 1 and 4.
+- **How it was fixed**: Eliminated secondary diagnostic navigation; captured active price text in the exact same page state during the primary scrape, and added a same-state agreement check in `storeClient.js` that raises `PRICE_MISMATCH` and triggers a retry if HTML-parsed price disagrees with rendered element text.
+
+### Entry 20: Cron Cycle Queue Starvation Risk Under Heavy Tracking Load
+- **What went wrong**: The scrape queue treated all jobs with equal admission constraints against `maxSize`. Under bursts of user tracking requests or manual force-scrapes filling the queue to capacity, scheduled cron cycles could be rejected with `QueueFullError`, missing scheduled tracking intervals.
+- **How it was detected**: User requirement review for queue reliability under concurrent tracking requests.
+- **How it was fixed**: Reserved a dedicated queue slot for scheduled cron cycles (`reservedCronSlots = 1`) in `ScrapeQueue`. Non-cron tracking requests are capped at `maxSize - reservedCronSlots`, guaranteeing scheduled cron cycles can always enqueue without being crowded out. Added automated test in `server/tests/api.test.js`.
+
+
 
 

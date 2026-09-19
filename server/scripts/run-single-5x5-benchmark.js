@@ -6,6 +6,8 @@ import { scrapeProduct } from '../src/services/storeClient.js';
 import { getBrowserInstance, closeBrowser } from '../src/services/browserScraper.js';
 import { parseProductHtml } from '../src/services/parser.js';
 
+import { execSync } from 'child_process';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const evidenceDir = path.resolve(__dirname, '../../docs/evidence');
@@ -13,7 +15,12 @@ if (!fs.existsSync(evidenceDir)) {
   fs.mkdirSync(evidenceDir, { recursive: true });
 }
 
-const COMMIT_USED = 'c23a1046c98fa01715e63cf5b958de5a99663f61';
+let COMMIT_USED = 'unknown';
+try {
+  COMMIT_USED = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+} catch (e) {
+  console.warn('Could not determine git commit:', e.message);
+}
 
 async function runSingle5x5() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -60,75 +67,14 @@ async function runSingle5x5() {
 
       const durationMs = Date.now() - start;
 
-      // Extract DOM price elements from rendered page if available
-      let domPriceElements = [];
-      let selectedElement = null;
-
-      // To capture DOM elements accurately, fetch the page DOM using browserScraper context
-      const browser = await getBrowserInstance({ headed: false });
-      const diagContext = await browser.newContext();
-      try {
-        const diagPage = await diagContext.newPage();
-        await diagPage.goto(`${config.storeBaseUrl}/product/${product.store_product_id}`, { waitUntil: 'domcontentloaded', timeout: 10000 });
-        
-        // Check accept cookies
-        const cBtn = await diagPage.$('button[aria-label="Accept cookies"]');
-        if (cBtn) await cBtn.click().catch(() => {});
-
-        // Move mouse
-        const pb = await diagPage.waitForSelector('.price-block', { timeout: 4000 }).catch(() => null);
-        if (pb) {
-          const box = await pb.boundingBox();
-          if (box) {
-            for (let i = 0; i < 15; i++) {
-              await diagPage.mouse.move(box.x + 25 + (i % 4) * 15, box.y + 20);
-              await new Promise(r => setTimeout(r, 50));
-            }
-          }
-          const rBtn = await diagPage.$('button[aria-label="Reveal price"]');
-          if (rBtn) await rBtn.click().catch(() => {});
-          await diagPage.waitForFunction(() => {
-            const el = document.querySelector('.price-block');
-            return el && el.classList.contains('price-success');
-          }, { timeout: 8000 }).catch(() => {});
-        }
-
-        domPriceElements = await diagPage.evaluate(() => {
-          const all = Array.from(document.querySelectorAll('*')).filter(el => {
-            if (el.children.length > 2) return false;
-            const t = el.innerText || el.textContent || '';
-            return t.includes('₹') || t.includes('Rs') || /\b\d{1,3}(?:,\d{3})+\b/.test(t);
-          });
-          return all.map(el => {
-            const s = window.getComputedStyle(el);
-            const r = el.getBoundingClientRect();
-            return {
-              tag: el.tagName,
-              className: el.className,
-              text: (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' '),
-              display: s.display,
-              visibility: s.visibility,
-              opacity: s.opacity,
-              ariaHidden: el.getAttribute('aria-hidden'),
-              rect: { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) }
-            };
-          });
-        });
-
-        // Determine which element parser selected
-        const rawHtml = await diagPage.content();
-        try {
-          const parsed = parseProductHtml(rawHtml, product);
-          selectedElement = {
-            parsed_price: parsed.price,
-            extracted_from: domPriceElements.find(e => e.display !== 'none' && !e.className.includes('mr-') && !e.className.includes('sl-') && !e.className.includes('bd-'))?.text || 'active price container'
-          };
-        } catch {}
-      } catch (diagErr) {
-        // Diagnosis failure
-      } finally {
-        await diagContext.close();
-      }
+      // Extract DOM price elements and visible active price from the SAME scrape execution state
+      const domPriceElements = scrapeResult.data?.all_dom_price_elements || [];
+      const visibleDomText = scrapeResult.data?.rendered_price_text || null;
+      const selectedElement = {
+        parsed_price: scrapeResult.data?.price || null,
+        visible_dom_text: visibleDomText,
+        extracted_from: domPriceElements.find(e => e.display !== 'none' && !e.className.includes('mr-') && !e.className.includes('sl-') && !e.className.includes('bd-'))?.text || visibleDomText || 'active price container'
+      };
 
       const outcome = scrapeResult.success
         ? (scrapeResult.attempts > 1 ? 'retried' : 'success')
@@ -144,6 +90,7 @@ async function runSingle5x5() {
         attempts: scrapeResult.attempts || 1,
         total_duration_ms: durationMs,
         scraped_price: scrapeResult.data?.price != null ? scrapeResult.data.price : null,
+        visible_dom_text: visibleDomText,
         mrp: scrapeResult.data?.mrp != null ? scrapeResult.data.mrp : null,
         price_mrp_ratio: (scrapeResult.data?.price != null && scrapeResult.data?.mrp != null && scrapeResult.data.mrp > 0)
           ? Number((scrapeResult.data.price / scrapeResult.data.mrp).toFixed(4))

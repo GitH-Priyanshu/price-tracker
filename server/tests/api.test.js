@@ -256,7 +256,7 @@ test('Level B5 Hotfix: Serialized Scrape Queue', async (t) => {
   await t.test('rejects with QueueFullError when queue capacity is exceeded', () => {
     scrapeQueue.clear();
     const originalMax = scrapeQueue.maxSize;
-    scrapeQueue.setMaxSize(2);
+    scrapeQueue.setMaxSize(2, 0);
 
     try {
       // Fill the queue
@@ -287,6 +287,55 @@ test('Level B5 Hotfix: Serialized Scrape Queue', async (t) => {
           return true;
         }
       );
+    } finally {
+      scrapeQueue.setMaxSize(originalMax);
+      scrapeQueue.clear();
+    }
+  });
+
+  await t.test('cron cycles have a reserved queue slot so tracking jobs cannot crowd them out', () => {
+    scrapeQueue.clear();
+    const originalMax = scrapeQueue.maxSize;
+    // Capacity of 3 with 1 reserved slot for cron -> tracking jobs cap at 2 pending
+    scrapeQueue.setMaxSize(3, 1);
+
+    try {
+      // 1. Fill tracking quota (1 processing, 2 pending in queue = 2 pending tracking jobs)
+      scrapeQueue.enqueue({
+        type: 'product',
+        fn: () => new Promise((resolve) => setTimeout(resolve, 500))
+      });
+      scrapeQueue.enqueue({
+        type: 'product',
+        fn: () => Promise.resolve()
+      });
+      scrapeQueue.enqueue({
+        type: 'product',
+        fn: () => Promise.resolve()
+      });
+
+      // 3rd pending tracking job must be rejected to preserve the reserved cron slot
+      assert.throws(
+        () => {
+          scrapeQueue.enqueue({
+            type: 'product',
+            fn: () => Promise.resolve()
+          });
+        },
+        (err) => {
+          assert.equal(err.code, 'QUEUE_FULL');
+          assert.match(err.message, /Slot reserved for scheduled cron cycle/);
+          return true;
+        }
+      );
+
+      // BUT a cron cycle CAN still be enqueued in the reserved slot!
+      const cronJob = scrapeQueue.enqueue({
+        type: 'cron',
+        fn: () => Promise.resolve({ status: 'completed' })
+      });
+      assert.ok(cronJob.id);
+      assert.equal(cronJob.position, 3);
     } finally {
       scrapeQueue.setMaxSize(originalMax);
       scrapeQueue.clear();

@@ -174,11 +174,68 @@ export async function scrapeProductPage(productUrl, options = {}) {
       { timeout: waitTimeoutMs }
     );
 
+    // In the same page state: read the active price element text and all DOM price elements
+    let renderedPriceText = null;
+    let allDomPriceElements = [];
+    try {
+      const evalResult = await page.evaluate(() => {
+        const container = document.querySelector('.price-main, .price-block, [class*="priceWrap"], [class*="pw-"]');
+        let activeText = null;
+        if (container) {
+          const candidates = container.querySelectorAll('.pv-q9, [class*="pv-"], output, b, span');
+          for (const el of candidates) {
+            const s = window.getComputedStyle(el);
+            if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0' || el.getAttribute('aria-hidden') === 'true') {
+              continue;
+            }
+            if (el.className && (el.className.includes('mr-') || el.className.includes('sl-') || el.className.includes('bd-') || el.className.includes('price-value') || el.className.includes('amount'))) {
+              continue;
+            }
+            const t = (el.innerText || el.textContent || '').trim();
+            if (t.includes('₹') || t.includes('Rs') || /\b\d{1,3}(?:,\d{3})+\b/.test(t) || /\b\d{2,}\b/.test(t)) {
+              activeText = t;
+              break;
+            }
+          }
+          if (!activeText) activeText = container.innerText || null;
+        }
+
+        const all = Array.from(document.querySelectorAll('*')).filter(el => {
+          if (el.children.length > 2) return false;
+          const t = el.innerText || el.textContent || '';
+          return t.includes('₹') || t.includes('Rs') || /\b\d{1,3}(?:,\d{3})+\b/.test(t);
+        });
+        const domElements = all.map(el => {
+          const s = window.getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          return {
+            tag: el.tagName,
+            className: el.className,
+            text: (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' '),
+            display: s.display,
+            visibility: s.visibility,
+            opacity: s.opacity,
+            ariaHidden: el.getAttribute('aria-hidden'),
+            rect: { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height) }
+          };
+        });
+
+        return { activeText, domElements };
+      });
+      renderedPriceText = evalResult.activeText;
+      allDomPriceElements = evalResult.domElements;
+    } catch {
+      renderedPriceText = null;
+      allDomPriceElements = [];
+    }
+
     const html = await page.content();
     const durationMs = Date.now() - startTime;
 
     return {
       html,
+      renderedPriceText,
+      allDomPriceElements,
       httpStatus,
       durationMs,
       cookieClickError,
