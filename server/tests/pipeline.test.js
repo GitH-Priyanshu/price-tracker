@@ -46,6 +46,19 @@ test('Price Text Sanitization & Robust Parsing', async (t) => {
     assert.equal(parsePriceText('Rs. 7.921.00'), 7921);
   });
 
+  await t.test('parses real captured evidence strings (spaced-thousands, zero-width, multi-dot)', () => {
+    assert.equal(parsePriceText('₹\u200B7\u200B \u200B9\u200B2\u200B1'), 7921);
+    assert.equal(parsePriceText('7 921'), 7921);
+    assert.equal(parsePriceText('₹ 7 921'), 7921);
+    assert.equal(parsePriceText('Rs. 7 921'), 7921);
+    assert.equal(parsePriceText('R\u200Bs\u200B.\u200B \u200B8\u200B,\u200B5\u200B9\u200B3\u200B.\u200B0\u200B0'), 8593);
+    assert.equal(parsePriceText('Rs. 8.593.00'), 8593);
+    assert.equal(parsePriceText('₹8.593.00'), 8593);
+    assert.equal(parsePriceText('₹7.921.00'), 7921);
+    assert.equal(parsePriceText('₹\u200B8\u200B,\u200B0\u200B5\u200B3'), 8053);
+    assert.equal(parsePriceText('₹\u200B５\u200B８\u200B,\u200B３\u200B６\u200B８'), 58368);
+  });
+
   await t.test('parses unambiguous euro comma decimal formatting', () => {
     assert.equal(parsePriceText('6.727,00'), 6727);
     assert.equal(parsePriceText('1.250,50'), 1250.5);
@@ -220,6 +233,55 @@ test('Validator Strict Data Integrity Rules', async (t) => {
       (err) => err.errorType === 'IDENTITY_MISMATCH'
     );
   });
+
+  await t.test('MRP plausibility rule rejects prices below 30% or above 120% of MRP', () => {
+    // Valid: 7921 with MRP 12002 (ratio = 0.66) -> passes
+    assert.equal(
+      validateScrapedProduct({ ...expected, price: 7921, mrp: 12002, stock_status: 'in_stock' }, expected),
+      true
+    );
+    // Valid: surge pricing 12821 with MRP 11386 (ratio = 1.126) -> passes
+    assert.equal(
+      validateScrapedProduct({ ...expected, price: 12821, mrp: 11386, stock_status: 'in_stock' }, expected),
+      true
+    );
+    // Implausibly low: truncated price 7 with MRP 12002 (ratio = 0.00058 < 0.30) -> throws VALIDATION
+    assert.throws(
+      () => validateScrapedProduct({ ...expected, price: 7, mrp: 12002, stock_status: 'in_stock' }, expected),
+      (err) => {
+        assert.equal(err.errorType, 'VALIDATION');
+        assert.match(err.message, /Plausibility Failure/);
+        return true;
+      }
+    );
+    // Implausibly low: truncated price 8.59 with MRP 13020 (ratio = 0.00066 < 0.30) -> throws VALIDATION
+    assert.throws(
+      () => validateScrapedProduct({ ...expected, price: 8.59, mrp: 13020, stock_status: 'in_stock' }, expected),
+      (err) => {
+        assert.equal(err.errorType, 'VALIDATION');
+        assert.match(err.message, /Plausibility Failure/);
+        return true;
+      }
+    );
+    // Implausibly high: decoy price 25000 with MRP 12002 (ratio = 2.08 > 1.20) -> throws VALIDATION
+    assert.throws(
+      () => validateScrapedProduct({ ...expected, price: 25000, mrp: 12002, stock_status: 'in_stock' }, expected),
+      (err) => {
+        assert.equal(err.errorType, 'VALIDATION');
+        assert.match(err.message, /Plausibility Failure/);
+        return true;
+      }
+    );
+    // When MRP is absent/null: plausibility rule is not applied
+    assert.equal(
+      validateScrapedProduct({ ...expected, price: 7, mrp: null, stock_status: 'in_stock' }, expected),
+      true
+    );
+    assert.equal(
+      validateScrapedProduct({ ...expected, price: 25000, stock_status: 'in_stock' }, expected),
+      true
+    );
+  });
 });
 
 test('ScrapeProduct Pipeline Orchestration (Mocked Scraper)', async (t) => {
@@ -316,6 +378,41 @@ test('ScrapeProduct Pipeline Orchestration (Mocked Scraper)', async (t) => {
 
     assert.equal(result.success, false);
     assert.equal(result.error_type, 'IDENTITY_MISMATCH');
+  });
+
+  await t.test('retries on plausibility failure and succeeds on subsequent attempt', async () => {
+    let callCount = 0;
+    const mockScraper = async () => {
+      callCount++;
+      if (callCount === 1) {
+        // Attempt 1: price ₹7 against MRP ₹12,002 is implausible (< 0.30)
+        const implausibleHtml = `
+          <h1>Domus Sling Plus</h1>
+          <div class="price-main">
+            <span class="mr-m4" style="text-decoration: line-through;">₹12,002</span>
+            <output>₹7</output>
+          </div>
+          <span class="stock-badge in-stock">In stock · 10 left</span>
+        `;
+        return { html: implausibleHtml, httpStatus: 200 };
+      }
+      return { html: normalHtml, httpStatus: 200 };
+    };
+
+    const result = await scrapeProduct(product, {
+      scraperFn: mockScraper,
+      maxAttempts: 3,
+      timeoutMs: 500
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.attempts, 2);
+    assert.equal(result.attempt_details.length, 2);
+    assert.equal(result.attempt_details[0].outcome, 'failed');
+    assert.equal(result.attempt_details[0].error_type, 'VALIDATION');
+    assert.match(result.attempt_details[0].error_message, /Plausibility Failure/);
+    assert.equal(result.attempt_details[1].outcome, 'success');
+    assert.equal(result.data.price, 6727);
   });
 });
 

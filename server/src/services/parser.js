@@ -105,6 +105,9 @@ export function parsePriceText(rawText) {
     }
   }
 
+  // Normalize spaced thousands (e.g. "7 921" -> "7921")
+  cleaned = cleaned.replace(/(\d+)\s+(\d{3})(?!\d)/g, '$1$2');
+
   // Strip remaining spaces
   cleaned = cleaned.replace(/\s+/g, '');
 
@@ -265,13 +268,28 @@ export function parseProductHtml(html, fallbackMeta = {}) {
 
   const { stock_status, stock_quantity } = parseStockText(stockRawText, stockClass);
 
-  // 7. Extract SKU / Product ID from page if present
+  // 7. Extract MRP (original price with strikethrough or mr-* class) if present
+  let mrp = null;
+  const mrpMatch = html.match(/<[^>]+class="[^"]*\bmr-[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>/i) ||
+                   html.match(/<[^>]+style="[^"]*text-decoration:\s*line-through[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>/i);
+  if (mrpMatch) {
+    try {
+      const rawMrp = mrpMatch[1].replace(/<[^>]+>/g, '').trim();
+      if (rawMrp) {
+        mrp = parsePriceText(rawMrp);
+      }
+    } catch {
+      mrp = null;
+    }
+  }
+
+  // 8. Extract SKU / Product ID from page if present
   const skuMatch = html.match(/(?:sku|item|product code)[\s:#_-]*([a-z0-9-]+)/i) ||
                    html.match(/\b([A-Z]{3}-\d+)\b/) ||
                    html.match(/data-sku="([^"]+)"/i);
   const sku = skuMatch ? (skuMatch[1] || skuMatch[0]).trim() : null;
 
-  // 8. Store product ID
+  // 9. Store product ID
   const storeProductId = String(fallbackMeta.store_product_id || fallbackMeta.id || '');
 
   return {
@@ -279,6 +297,7 @@ export function parseProductHtml(html, fallbackMeta = {}) {
     name,
     sku,
     price,
+    mrp,
     stock_status,
     stock_quantity
   };

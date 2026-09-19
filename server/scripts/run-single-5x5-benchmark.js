@@ -13,7 +13,7 @@ if (!fs.existsSync(evidenceDir)) {
   fs.mkdirSync(evidenceDir, { recursive: true });
 }
 
-const COMMIT_USED = '735e5373c5856d559ad5b722880df574e5ab087b';
+const COMMIT_USED = 'c23a1046c98fa01715e63cf5b958de5a99663f61';
 
 async function runSingle5x5() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -144,6 +144,10 @@ async function runSingle5x5() {
         attempts: scrapeResult.attempts || 1,
         total_duration_ms: durationMs,
         scraped_price: scrapeResult.data?.price != null ? scrapeResult.data.price : null,
+        mrp: scrapeResult.data?.mrp != null ? scrapeResult.data.mrp : null,
+        price_mrp_ratio: (scrapeResult.data?.price != null && scrapeResult.data?.mrp != null && scrapeResult.data.mrp > 0)
+          ? Number((scrapeResult.data.price / scrapeResult.data.mrp).toFixed(4))
+          : null,
         stock_status: scrapeResult.data?.stock_status || null,
         stock_quantity: scrapeResult.data?.stock_quantity ?? null,
         click_or_wait_errors: scrapeResult.attempt_details?.filter(a => a.outcome === 'failed').map(a => ({
@@ -162,6 +166,8 @@ async function runSingle5x5() {
         `  [Run ${String(overallRunIndex).padStart(2)}/25] Prod ${runRecord.product_id} (#${seriesRun}/5): ` +
         `Outcome=${runRecord.outcome.toUpperCase()} (${runRecord.attempts} att), ` +
         `Price=${runRecord.scraped_price != null ? '₹' + runRecord.scraped_price : 'N/A'}, ` +
+        `MRP=${runRecord.mrp != null ? '₹' + runRecord.mrp : 'N/A'} ` +
+        `(Ratio=${runRecord.price_mrp_ratio != null ? runRecord.price_mrp_ratio : 'N/A'}), ` +
         `Duration=${durationMs}ms`
       );
     }
@@ -199,11 +205,20 @@ async function runSingle5x5() {
     const pRuns = allRuns.filter(r => r.product_id === p.store_product_id);
     const validPrices = pRuns.map(r => r.scraped_price).filter(pr => pr !== null);
     const uniquePrices = Array.from(new Set(validPrices));
+    const runDetails = pRuns.map(r => ({
+      series_run: r.series_run_index,
+      price: r.scraped_price,
+      mrp: r.mrp,
+      price_mrp_ratio: r.price_mrp_ratio,
+      outcome: r.outcome,
+      attempts: r.attempts
+    }));
     report.price_variation_analysis[p.store_product_id] = {
       product_name: p.name,
       observed_prices: validPrices,
       unique_prices: uniquePrices,
-      has_variation: uniquePrices.length > 1
+      has_variation: uniquePrices.length > 1,
+      runs: runDetails
     };
   }
 
