@@ -241,6 +241,10 @@ async function processProductScrape(product, runId, options = {}) {
  */
 import scrapeQueue, { QueueFullError } from './scrapeQueue.js';
 
+export function getActiveRunId() {
+  return activeRunId;
+}
+
 export { scrapeQueue, QueueFullError };
 
 /**

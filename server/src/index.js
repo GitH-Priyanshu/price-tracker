@@ -43,17 +43,39 @@ app.use('/api/*', (req, res) => {
   });
 });
 
-// 5. Central error handler (never leaks stack traces to the client)
+import { getActiveRunId } from './services/scrapeRunner.js';
+
+// 5. Central error handler (never leaks stack traces to the client, returns clean JSON)
 app.use((err, req, res, next) => {
-  console.error('[API Error]:', err.message);
-  const status = err.status || (err.name === 'ValidationError' ? 400 : 500);
-  const code = err.code || (status === 400 ? 'VALIDATION_ERROR' : 'INTERNAL_SERVER_ERROR');
+  console.error('[API Error]:', err.stack || err.message);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const isValidation = err.name === 'ValidationError';
+  const isQueueFull = err.name === 'QueueFullError' || err.code === 'QUEUE_FULL';
+  const isUnauthorized = err.code === 'UNAUTHORIZED' || err.status === 401;
+  const isNotFound = err.code === 'NOT_FOUND' || err.status === 404;
+
+  const status = err.status || (isValidation ? 400 : (isUnauthorized ? 401 : (isNotFound ? 404 : (isQueueFull ? 429 : 500))));
+  const code = err.code || (isValidation ? 'VALIDATION_ERROR' : (isQueueFull ? 'QUEUE_FULL' : (isUnauthorized ? 'UNAUTHORIZED' : (isNotFound ? 'NOT_FOUND' : 'INTERNAL_SERVER_ERROR'))));
+
   res.status(status).json({
     error: {
       code,
       message: err.message || 'An unexpected error occurred'
     }
   });
+});
+
+// Process-level safety: loud logging with active run_id so scheduled scrapes and server never crash silently
+process.on('unhandledRejection', (reason) => {
+  const runId = reason?.runId || reason?.run_id || getActiveRunId() || 'N/A';
+  console.error(`[FATAL UNHANDLED REJECTION] [Run ID: ${runId}]:`, reason?.stack || reason);
+});
+
+process.on('uncaughtException', (err) => {
+  const runId = err?.runId || err?.run_id || getActiveRunId() || 'N/A';
+  console.error(`[FATAL UNCAUGHT EXCEPTION] [Run ID: ${runId}]:`, err?.stack || err);
 });
 
 import { fileURLToPath } from 'url';

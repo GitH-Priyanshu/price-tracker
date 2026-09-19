@@ -79,6 +79,8 @@ class ScrapeQueue {
       resolveJob = resolve;
       rejectJob = reject;
     });
+    // Prevent unhandled promise rejection for fire-and-forget callers
+    promise.catch(() => {});
 
     const job = {
       id,

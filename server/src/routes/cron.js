@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import config from '../config/index.js';
-import { runScrapeCycle } from '../services/scrapeRunner.js';
+import { runScrapeCycle, scrapeQueue, QueueFullError } from '../services/scrapeRunner.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
 const router = Router();
 
@@ -40,7 +41,7 @@ function constantTimeSecretCompare(supplied, configured) {
  * external cron timeouts (cron-job.org), executing scrape in background.
  * In manual/test mode (?wait=true): awaits cycle completion and returns full summary.
  */
-router.post('/scrape', async (req, res, next) => {
+router.post('/scrape', asyncHandler(async (req, res, next) => {
   try {
     const suppliedSecret = req.headers['x-cron-secret'];
 
@@ -67,29 +68,22 @@ router.post('/scrape', async (req, res, next) => {
     }
 
     // 3. Normal async mode: enqueue in scrapeQueue and respond immediately with 202 Accepted
-    if (process.env.NODE_ENV !== 'test') {
-      const enqueued = scrapeQueue.enqueue({
-        type: 'cron',
-        metadata: { force },
-        fn: (jobId) => runScrapeCycle({ force, skipQueue: true, runId: jobId })
-      });
-
-      return res.status(202).json({
-        status: 'accepted',
-        message: 'Scrape cycle accepted and enqueued',
-        run_id: enqueued.id,
-        queue_position: enqueued.position
-      });
-    }
+    const enqueued = scrapeQueue.enqueue({
+      type: 'cron',
+      metadata: { force },
+      fn: (jobId) => process.env.NODE_ENV === 'test'
+        ? Promise.resolve({ success: true, runId: jobId })
+        : runScrapeCycle({ force, skipQueue: true, runId: jobId })
+    });
 
     return res.status(202).json({
       status: 'accepted',
       message: 'Scrape cycle accepted and enqueued',
-      run_id: crypto.randomUUID(),
-      queue_position: 1
+      run_id: enqueued.id,
+      queue_position: enqueued.position
     });
   } catch (err) {
-    if (err instanceof QueueFullError || err.code === 'QUEUE_FULL') {
+    if (err instanceof QueueFullError || err.code === 'QUEUE_FULL' || err.name === 'QueueFullError') {
       return res.status(429).json({
         status: 'skipped',
         error: {
@@ -100,6 +94,6 @@ router.post('/scrape', async (req, res, next) => {
     }
     next(err);
   }
-});
+}));
 
 export default router;

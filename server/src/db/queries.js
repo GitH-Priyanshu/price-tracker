@@ -106,6 +106,10 @@ export async function listActiveProducts() {
  * @returns {Promise<Object|null>}
  */
 export async function getProduct(productId) {
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!productId || typeof productId !== 'string' || !UUID_REGEX.test(productId)) {
+    return null;
+  }
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('products')
@@ -113,7 +117,10 @@ export async function getProduct(productId) {
     .eq('id', productId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === '22P02') return null;
+    throw error;
+  }
   return data;
 }
 

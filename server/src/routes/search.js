@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { searchProducts } from '../services/storeClient.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.use(searchLimiter);
  * Searches the mock store catalog by keyword.
  * Requires query parameter 'q' of at least 2 characters.
  */
-router.get('/', async (req, res, next) => {
+router.get('/', asyncHandler(async (req, res, next) => {
   try {
     const q = req.query.q;
 
@@ -41,6 +42,6 @@ router.get('/', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 export default router;

@@ -11,7 +11,8 @@ import {
   getLatestPrice,
   getScrapeLogs
 } from '../db/index.js';
-import { runScrapeCycle, scrapeQueue } from '../services/scrapeRunner.js';
+import { runScrapeCycle, scrapeQueue, QueueFullError } from '../services/scrapeRunner.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
 const router = Router();
 
@@ -69,7 +70,7 @@ async function resolveProductMetadata(storeProductId, overrides = {}) {
  * GET /api/products
  * Lists all active tracked products with their latest price and stock status.
  */
-router.get('/', async (req, res, next) => {
+router.get('/', asyncHandler(async (req, res, next) => {
   try {
     const products = await listActiveProducts();
 
@@ -90,7 +91,7 @@ router.get('/', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 /**
  * POST /api/products
@@ -98,7 +99,7 @@ router.get('/', async (req, res, next) => {
  * Idempotent: reactivates previously deactivated products.
  * Triggers one immediate scrape so the initial data point appears.
  */
-router.post('/', async (req, res, next) => {
+router.post('/', asyncHandler(async (req, res, next) => {
   try {
     const body = req.body || {};
     let storeProductId = body.store_product_id || body.id || body.identifier;
@@ -162,13 +163,13 @@ router.post('/', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 /**
  * GET /api/products/:id
  * Retrieves a single product detail with its latest price and stock.
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', asyncHandler(async (req, res, next) => {
   try {
     const product = await getProduct(req.params.id);
     if (!product) {
@@ -191,14 +192,14 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 /**
  * POST /api/products/:id/scrape
  * Manually forces a scrape for a specific tracked product.
  * PROTECTED: Requires x-cron-secret header.
  */
-router.post('/:id/scrape', async (req, res, next) => {
+router.post('/:id/scrape', asyncHandler(async (req, res, next) => {
   try {
     const suppliedSecret = req.headers['x-cron-secret'];
     if (!suppliedSecret || typeof suppliedSecret !== 'string' || !config.cronSecret) {
@@ -240,7 +241,9 @@ router.post('/:id/scrape', async (req, res, next) => {
     const enqueued = scrapeQueue.enqueue({
       type: 'product',
       metadata: { productId: product.id, storeProductId: product.store_product_id },
-      fn: (jobId) => runScrapeCycle({ products: [product], force: true, skipQueue: true, runId: jobId })
+      fn: (jobId) => process.env.NODE_ENV === 'test'
+        ? Promise.resolve({ success: true, runId: jobId })
+        : runScrapeCycle({ products: [product], force: true, skipQueue: true, runId: jobId })
     });
 
     return res.status(202).json({
@@ -249,15 +252,24 @@ router.post('/:id/scrape', async (req, res, next) => {
       run_id: enqueued.id
     });
   } catch (err) {
+    if (err instanceof QueueFullError || err.code === 'QUEUE_FULL' || err.name === 'QueueFullError') {
+      return res.status(429).json({
+        status: 'skipped',
+        error: {
+          code: 'QUEUE_FULL',
+          message: err.message
+        }
+      });
+    }
     next(err);
   }
-});
+}));
 
 /**
  * DELETE /api/products/:id
  * Stops tracking a product by deactivating it (is_active = false).
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', asyncHandler(async (req, res, next) => {
   try {
     const product = await getProduct(req.params.id);
     if (!product) {
@@ -279,14 +291,14 @@ router.delete('/:id', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 /**
  * GET /api/products/:id/history
  * Retrieves price and stock history for a product.
  * Supports optional ?range=24h|7d|30d or ?from=&to= query filters.
  */
-router.get('/:id/history', async (req, res, next) => {
+router.get('/:id/history', asyncHandler(async (req, res, next) => {
   try {
     const product = await getProduct(req.params.id);
     if (!product) {
@@ -309,14 +321,14 @@ router.get('/:id/history', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 /**
  * GET /api/products/:id/logs
  * Retrieves paginated scrape logs for a product, newest first.
  * Supports optional ?limit=50&offset=0 pagination query parameters.
  */
-router.get('/:id/logs', async (req, res, next) => {
+router.get('/:id/logs', asyncHandler(async (req, res, next) => {
   try {
     const product = await getProduct(req.params.id);
     if (!product) {
@@ -344,6 +356,6 @@ router.get('/:id/logs', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-});
+}));
 
 export default router;

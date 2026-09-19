@@ -31,6 +31,11 @@ after(async () => {
   if (server) {
     await new Promise((resolve) => server.close(resolve));
   }
+  scrapeQueue.clear();
+  try {
+    const { closeBrowser } = await import('../src/services/browserScraper.js');
+    await closeBrowser();
+  } catch (e) {}
   // Safety cleanup: ensure no test-* products remain in DB
   const supabase = getSupabaseClient();
   const { data: testProducts } = await supabase
@@ -405,6 +410,141 @@ test('Level B6: Headed Scraper & Fault Injection Production Guard', async (t) =>
     });
 
     assert.equal(res.status, 202);
+  });
+});
+
+test('Level B7: Protected Scrape Routes & Queue Integration', async (t) => {
+  await t.test('POST /api/cron/scrape without secret returns 401 UNAUTHORIZED', async () => {
+    const res = await fetch(`${baseUrl}/api/cron/scrape`, { method: 'POST' });
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.error.code, 'UNAUTHORIZED');
+  });
+
+  await t.test('POST /api/cron/scrape with invalid secret returns 401 UNAUTHORIZED', async () => {
+    const res = await fetch(`${baseUrl}/api/cron/scrape`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': 'wrong-secret' }
+    });
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.error.code, 'UNAUTHORIZED');
+  });
+
+  await t.test('POST /api/cron/scrape with valid secret returns 202 and run_id', async () => {
+    const res = await fetch(`${baseUrl}/api/cron/scrape`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': config.cronSecret }
+    });
+    assert.equal(res.status, 202);
+    const body = await res.json();
+    assert.equal(body.status, 'accepted');
+    assert.ok(body.run_id);
+    assert.ok(typeof body.queue_position === 'number');
+    scrapeQueue.clear();
+  });
+
+  await t.test('POST /api/cron/scrape returns 429 QUEUE_FULL when queue limit is reached', async () => {
+    const originalQueue = [...scrapeQueue.queue];
+    while (scrapeQueue.queue.length < scrapeQueue.maxSize) {
+      scrapeQueue.queue.push({
+        id: 'mock-filler-' + Math.random(),
+        type: 'cron',
+        fn: async () => {},
+        resolve: () => {},
+        reject: () => {}
+      });
+    }
+
+    try {
+      const res = await fetch(`${baseUrl}/api/cron/scrape`, {
+        method: 'POST',
+        headers: { 'x-cron-secret': config.cronSecret }
+      });
+      assert.equal(res.status, 429);
+      const body = await res.json();
+      assert.equal(body.status, 'skipped');
+      assert.equal(body.error.code, 'QUEUE_FULL');
+    } finally {
+      scrapeQueue.queue = originalQueue;
+    }
+  });
+
+  await t.test('POST /api/products/:id/scrape requires valid x-cron-secret', async () => {
+    const resNoSecret = await fetch(`${baseUrl}/api/products/any-id/scrape`, { method: 'POST' });
+    assert.equal(resNoSecret.status, 401);
+
+    const resBadSecret = await fetch(`${baseUrl}/api/products/any-id/scrape`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': 'bad' }
+    });
+    assert.equal(resBadSecret.status, 401);
+  });
+
+  await t.test('POST /api/products/:id/scrape returns 404 for nonexistent product', async () => {
+    const res = await fetch(`${baseUrl}/api/products/non-existent-uuid/scrape`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': config.cronSecret }
+    });
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.error.code, 'NOT_FOUND');
+  });
+
+  await t.test('POST /api/products/:id/scrape with existing product enqueues and returns 202', async () => {
+    const trackRes = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: 'test-cron-force-scrape-prod', name: 'Cron Force Test' })
+    });
+    assert.equal(trackRes.status, 201);
+    const trackBody = await trackRes.json();
+    const productId = trackBody.product.id;
+
+    const scrapeRes = await fetch(`${baseUrl}/api/products/${productId}/scrape`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': config.cronSecret }
+    });
+    assert.equal(scrapeRes.status, 202);
+    const scrapeBody = await scrapeRes.json();
+    assert.equal(scrapeBody.status, 'accepted');
+    assert.ok(scrapeBody.run_id);
+    scrapeQueue.clear();
+  });
+
+  await t.test('POST /api/products/:id/scrape returns 429 when queue is full', async () => {
+    const trackRes = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: 'test-cron-queue-full-prod', name: 'Cron Q Full Test' })
+    });
+    assert.equal(trackRes.status, 201);
+    const trackBody = await trackRes.json();
+    const productId = trackBody.product.id;
+
+    const originalQueue = [...scrapeQueue.queue];
+    while (scrapeQueue.queue.length < scrapeQueue.maxSize) {
+      scrapeQueue.queue.push({
+        id: 'mock-filler-' + Math.random(),
+        type: 'product',
+        fn: async () => {},
+        resolve: () => {},
+        reject: () => {}
+      });
+    }
+
+    try {
+      const res = await fetch(`${baseUrl}/api/products/${productId}/scrape`, {
+        method: 'POST',
+        headers: { 'x-cron-secret': config.cronSecret }
+      });
+      assert.equal(res.status, 429);
+      const body = await res.json();
+      assert.equal(body.status, 'skipped');
+      assert.equal(body.error.code, 'QUEUE_FULL');
+    } finally {
+      scrapeQueue.queue = originalQueue;
+    }
   });
 });
 
