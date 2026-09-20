@@ -7,6 +7,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+/**
+ * Normalizes frontend origin by trimming whitespace and stripping trailing slashes.
+ * Prevents subtle CORS comparison failures when env vars have trailing slashes.
+ * @param {string} origin
+ * @returns {string}
+ */
+export function normalizeOrigin(origin) {
+  if (!origin) return '';
+  const trimmed = String(origin).trim();
+  if (trimmed === '*') return '*';
+  return trimmed.replace(/\/+$/, '');
+}
+
+const rawFrontendOrigin = (process.env.FRONTEND_ORIGIN || '').trim();
+const resolvedFrontendOrigin = (!rawFrontendOrigin || rawFrontendOrigin === 'FRONTEND_ORIGIN')
+  ? 'http://localhost:5173'
+  : normalizeOrigin(rawFrontendOrigin);
+
 const config = {
   // Database (Supabase)
   supabaseUrl: (process.env.SUPABASE_URL || '').trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, ''),
@@ -14,7 +32,7 @@ const config = {
 
   // Authentication & Security
   cronSecret: (process.env.CRON_SECRET || 'test-cron-secret-12345').trim(),
-  frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+  frontendOrigin: resolvedFrontendOrigin,
 
   // Network & Mock Store
   port: parseInt(process.env.PORT || '3000', 10),

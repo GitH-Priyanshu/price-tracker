@@ -20,10 +20,14 @@ function setServerWaking(val) {
   }
 }
 
+const MAX_RETRIES = 3;
+const MAX_WAIT_BUDGET_MS = 90000; // 90 seconds max budget
+
 /**
  * Robust fetch wrapper handling Render sleeping cold starts, automatic retries, and friendly wake notices.
+ * Halts after 3 retries or 90s, stops waking state, and surfaces real network/CORS error.
  */
-async function request(endpoint, options = {}, retries = 2) {
+async function request(endpoint, options = {}, retries = MAX_RETRIES, startTime = Date.now()) {
   const url = `${API_BASE}${endpoint}`;
   const headers = {
     'Content-Type': 'application/json',
@@ -62,20 +66,28 @@ async function request(endpoint, options = {}, retries = 2) {
   } catch (err) {
     clearTimeout(timer);
 
-    // If network error / cold start sleep timeout, retry with friendly wake state
-    if (retries > 0 && (err.name === 'TypeError' || err.message.includes('fetch') || err.message.includes('NetworkError'))) {
+    const elapsed = Date.now() - startTime;
+    const isNetworkError = err.name === 'TypeError' ||
+                          (err.message && (err.message.includes('fetch') ||
+                                           err.message.includes('NetworkError') ||
+                                           err.message.includes('Failed to fetch')));
+
+    // If network error, still have retries, and within 90s budget, retry
+    if (retries > 0 && elapsed < MAX_WAIT_BUDGET_MS && isNetworkError) {
       setServerWaking(true);
       await new Promise(r => setTimeout(r, 2000));
-      return request(endpoint, options, retries - 1);
+      return request(endpoint, options, retries - 1, startTime);
     }
 
-    if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      setServerWaking(true);
-      const friendlyErr = new Error('Waking up the server (Render free instance sleeps when idle and may take up to 60s). Retrying...');
-      throw friendlyErr;
-    }
-
+    // Retries exhausted or budget exceeded: clear waking state and throw real actionable error
     setServerWaking(false);
+
+    if (isNetworkError) {
+      const realError = new Error(`Cannot reach the backend: CORS or network error (${err.message || 'connection failed'})`);
+      realError.originalError = err;
+      throw realError;
+    }
+
     throw err;
   }
 }

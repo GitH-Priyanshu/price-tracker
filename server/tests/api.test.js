@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import app from '../src/index.js';
-import config from '../src/config/index.js';
+import config, { normalizeOrigin } from '../src/config/index.js';
 import { createRateLimiter } from '../src/middleware/rateLimiter.js';
 import { getSupabaseClient } from '../src/db/client.js';
 import scrapeQueue, { QueueFullError } from '../src/services/scrapeQueue.js';
@@ -60,6 +60,26 @@ test('Level B5: Health Endpoint', async (t) => {
     assert.equal(body.status, 'ok');
     assert.ok(body.timestamp);
     assert.ok(typeof body.uptime === 'number');
+  });
+});
+
+test('Level B5: Security & CORS Normalization', async (t) => {
+  await t.test('normalizeOrigin trims whitespace and strips trailing slashes', () => {
+    assert.equal(normalizeOrigin('https://price-tracker-client.vercel.app/'), 'https://price-tracker-client.vercel.app');
+    assert.equal(normalizeOrigin('  https://price-tracker-client.vercel.app/  '), 'https://price-tracker-client.vercel.app');
+    assert.equal(normalizeOrigin('http://localhost:5173/'), 'http://localhost:5173');
+    assert.equal(normalizeOrigin('*'), '*');
+    assert.equal(normalizeOrigin(''), '');
+    assert.equal(normalizeOrigin(null), '');
+  });
+
+  await t.test('CORS headers allow requests from normalized frontend origin', async () => {
+    const res = await fetch(`${baseUrl}/api/health`, {
+      headers: { Origin: 'http://localhost:5173' }
+    });
+    assert.equal(res.status, 200);
+    const allowOrigin = res.headers.get('access-control-allow-origin');
+    assert.ok(allowOrigin === 'http://localhost:5173' || allowOrigin === '*');
   });
 });
 
@@ -166,6 +186,16 @@ test('Level B5: Search Route (/api/search)', async (t) => {
     const stats = await res.json();
     assert.equal(stats.has459, true, 'has459 should be true in cache stats');
     assert.ok(stats.itemCount > 0, 'itemCount should be positive');
+  });
+
+  await t.test('search with numeric ID falls back to direct store lookup if absent in cache', async () => {
+    const res = await fetch(`${baseUrl}/api/search?q=459`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(Array.isArray(data.products));
+    const found = data.products.find((p) => String(p.store_product_id) === '459');
+    assert.ok(found, 'Direct numeric lookup must find product 459');
+    assert.equal(found.name, 'Domus Sling Plus');
   });
 
   await t.test('Track button posts store_product_id from search result and creates product with correct id and name', async () => {

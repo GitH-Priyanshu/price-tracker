@@ -357,6 +357,12 @@ select {
   border: 1px solid var(--status-failed);
 }
 
+.alert-warning {
+  background-color: var(--status-retried-bg);
+  color: var(--status-retried);
+  border: 1px solid var(--status-retried);
+}
+
 /* Recharts container wrapper */
 .chart-wrapper {
   border: 1px solid var(--border);

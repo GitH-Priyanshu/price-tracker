@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import config, { validateConfig } from './config/index.js';
+import config, { validateConfig, normalizeOrigin } from './config/index.js';
 import healthRouter from './routes/health.js';
 import searchRouter from './routes/search.js';
 import productsRouter from './routes/products.js';
@@ -18,9 +18,20 @@ app.set('trust proxy', 1);
 // 1. HTTP Request Logging
 app.use(requestLogger);
 
-// 2. Security and CORS (restricted to FRONTEND_ORIGIN)
+// 2. Security and CORS (restricted to FRONTEND_ORIGIN with normalization)
 app.use(cors({
-  origin: config.frontendOrigin === '*' ? '*' : config.frontendOrigin,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const configured = normalizeOrigin(config.frontendOrigin);
+    if (
+      configured === '*' ||
+      normalizeOrigin(origin) === configured ||
+      (config.nodeEnv !== 'production' && (origin.includes('localhost') || origin.includes('127.0.0.1')))
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-cron-secret']
 }));

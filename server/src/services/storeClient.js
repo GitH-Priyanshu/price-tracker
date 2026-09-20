@@ -418,10 +418,12 @@ export async function refreshCatalogCache(force = false) {
       catalogCache.items = allItems;
       catalogCache.cachedAt = Date.now();
 
-      if (anyPageFailed) {
+      // Make cache honest: isPartial is true if any page failed OR unique items count is below store total
+      const isCountPartial = allItems.length < storeTotal;
+      if (anyPageFailed || isCountPartial) {
         catalogCache.isPartial = true;
-        catalogCache.ttlMs = PARTIAL_TTL_MS;
-        catalogCache.message = `Partial catalog cached (${allItems.length} items); pages failed: ${failedPages.join(', ')}. Degraded TTL: ${PARTIAL_TTL_MS / 1000}s.`;
+        catalogCache.ttlMs = isCountPartial && !anyPageFailed ? FULL_TTL_MS : PARTIAL_TTL_MS;
+        catalogCache.message = `Partial catalog cached (${allItems.length}/${storeTotal} unique products discovered due to upstream store shuffling${anyPageFailed ? `; failed pages: ${failedPages.join(', ')}` : ''}).`;
         console.warn(`[StoreClient] ${catalogCache.message}`);
       } else {
         catalogCache.isPartial = false;
@@ -448,6 +450,7 @@ export async function refreshCatalogCache(force = false) {
 /**
  * Searches the catalog with:
  * - Multi-word case-insensitive matching: all words must appear in name + brand + sku (or query matches ID)
+ * - Fallback to direct lookup (numeric ID) when zero matches are found in cache
  * - Deterministic ordering: exact name match first (case-insensitive), then alphabetical by name, then by ID
  * 
  * @param {string} query - Search term
@@ -472,6 +475,32 @@ export async function searchProducts(query, options = {}) {
     const idMatch = String(item.id) === query.trim();
     return wordsMatch || idMatch;
   });
+
+  // Fallback: when search finds nothing, fall back to direct lookup for numeric ID
+  if (matches.length === 0) {
+    const trimmed = query.trim();
+    const numericMatch = trimmed.match(/^\d+$/) || trimmed.match(/DOM-10?(\d+)/i);
+    const targetId = numericMatch ? (numericMatch[1] || numericMatch[0]) : null;
+
+    if (targetId) {
+      try {
+        const directRes = await fetch(`${config.storeBaseUrl}/api/product/${targetId}`);
+        if (directRes.ok) {
+          const directItem = await directRes.json();
+          if (directItem && directItem.id != null) {
+            const idStr = String(directItem.id);
+            if (!catalogCache.items.some((it) => String(it.id) === idStr)) {
+              catalogCache.items.push(directItem);
+              catalogCache.items.sort((a, b) => Number(a.id) - Number(b.id));
+            }
+            matches.push(directItem);
+          }
+        }
+      } catch (directErr) {
+        console.warn(`[StoreClient] Direct product lookup fallback failed for ${targetId}:`, directErr.message);
+      }
+    }
+  }
 
   // Deterministic sort:
   // 1. Exact name match first (case-insensitive)

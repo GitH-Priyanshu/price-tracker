@@ -11,6 +11,7 @@ export default function CatalogSearch({ onTrack, isTracking, trackedStoreIds = n
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isPartial, setIsPartial] = useState(false);
   const RESULT_CAP = 30;
 
   const handleSearch = async (e) => {
@@ -25,6 +26,7 @@ export default function CatalogSearch({ onTrack, isTracking, trackedStoreIds = n
     try {
       const data = await searchCatalog(query.trim());
       setResults(data.products || []);
+      setIsPartial(Boolean(data.isPartial));
       setHasSearched(true);
     } catch (err) {
       setError(err.message || 'Search failed');
@@ -51,6 +53,12 @@ export default function CatalogSearch({ onTrack, isTracking, trackedStoreIds = n
       </form>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      {isPartial && (
+        <div className="alert alert-warning" role="status">
+          Search may not include every product. You can also track by store ID.
+        </div>
+      )}
 
       {hasSearched && (
         <>
