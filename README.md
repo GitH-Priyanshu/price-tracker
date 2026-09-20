@@ -2,8 +2,11 @@
 
 An automated price and stock tracking service and dashboard for e-commerce products, featuring resilient web scraping, real-time analytics, and honest execution telemetry.
 
-- **Live Frontend**: [<VERCEL_URL>](https://price-tracker-seven-dun.vercel.app)
-- **Live Backend API**: [<RENDER_URL>](https://price-tracker-h20m.onrender.com)
+## What this project does
+Search for any product in the store catalog or lookup directly by store ID, then track it with one click. An external cron triggers the backend every 2 hours to scrape current price and stock status using a headless Chromium browser. Every scrape is strictly validated (agreement checks, plausibility bounds, and zero speculatively filled data); failures and retries are logged honestly in the database and never pollute price history. The real-time dashboard visualizes historical price movements, discount percentages, and detailed audit telemetry logs.
+
+- **Live Frontend**: [https://price-tracker-seven-dun.vercel.app](https://price-tracker-seven-dun.vercel.app)
+- **Live Backend API**: [https://price-tracker-h20m.onrender.com](https://price-tracker-h20m.onrender.com)
 
 ---
 
