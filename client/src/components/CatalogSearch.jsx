@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { searchCatalog } from '../api/client.js';
+import StatusPill from './StatusPill.jsx';
 
 /**
  * Catalog search component: searches mock store by query and allows one-click tracking.
@@ -10,6 +11,7 @@ export default function CatalogSearch({ onTrack, isTracking, trackedStoreIds = n
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const RESULT_CAP = 30;
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -31,12 +33,14 @@ export default function CatalogSearch({ onTrack, isTracking, trackedStoreIds = n
     }
   };
 
+  const displayedResults = results.slice(0, RESULT_CAP);
+
   return (
     <div>
       <form onSubmit={handleSearch} style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
         <input
           type="search"
-          placeholder="Search catalog (e.g. sling, soundbar, monitor, dock)..."
+          placeholder="Search catalog (e.g. domus, sling, soundbar, 459)..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search catalog query"
@@ -55,50 +59,71 @@ export default function CatalogSearch({ onTrack, isTracking, trackedStoreIds = n
               No catalog products matched "{query}".
             </p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Store ID</th>
-                  <th>Product</th>
-                  <th>Category</th>
-                  <th>Catalog Price</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((item) => {
-                  const isTracked = trackedStoreIds.has(String(item.id));
-                  return (
-                    <tr key={item.id}>
-                      <td className="mono">{item.id}</td>
-                      <td>
-                        <strong>{item.name}</strong>
-                        {item.brand && <span style={{ color: 'var(--text-muted)' }}> ({item.brand})</span>}
-                      </td>
-                      <td>{item.category || '—'}</td>
-                      <td>
-                        ₹{(item.price || 0).toLocaleString('en-IN')}
-                        {item.mrp && (
-                          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)', marginLeft: 'var(--space-1)' }}>
-                            (MRP ₹{item.mrp.toLocaleString('en-IN')})
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-primary"
-                          onClick={() => onTrack(item.id, { name: item.name, category: item.category, brand: item.brand, sku: item.sku })}
-                          disabled={isTracked || isTracking === String(item.id)}
-                        >
-                          {isTracked ? 'Tracked' : (isTracking === String(item.id) ? 'Tracking...' : 'Track')}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <>
+              <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)', marginBottom: 'var(--space-2)' }}>
+                Showing {displayedResults.length} of {results.length} results
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Store ID</th>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Catalog Price</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedResults.map((item) => {
+                    const storeId = String(item.store_product_id || item.id || '');
+                    const isTracked = trackedStoreIds.has(storeId);
+                    const isCurrentTracking = isTracking === storeId;
+
+                    return (
+                      <tr key={storeId}>
+                        <td className="mono" style={{ fontWeight: 600 }}>{storeId}</td>
+                        <td>
+                          <strong>{item.name}</strong>
+                          {item.brand && <span style={{ color: 'var(--text-muted)' }}> ({item.brand})</span>}
+                          {isTracked && (
+                            <span style={{ marginLeft: 'var(--space-2)' }}>
+                              <StatusPill status="tracking" />
+                            </span>
+                          )}
+                        </td>
+                        <td>{item.category || '-'}</td>
+                        <td>
+                          {item.price != null && item.price > 0
+                            ? `₹${Number(item.price).toLocaleString('en-IN')}`
+                            : '-'}
+                          {item.mrp != null && item.mrp > 0 && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)', marginLeft: 'var(--space-1)' }}>
+                              (MRP ₹{Number(item.mrp).toLocaleString('en-IN')})
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {isTracked ? (
+                            <span className="pill pill-success" style={{ fontWeight: 600 }}>
+                              Tracking
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-primary"
+                              onClick={() => onTrack(storeId, { name: item.name, category: item.category, brand: item.brand, sku: item.sku })}
+                              disabled={isCurrentTracking}
+                            >
+                              {isCurrentTracking ? 'Tracking...' : 'Track'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </>
       )}

@@ -12,7 +12,7 @@ export default function StatusPill({ status }) {
   const normalized = String(status).toLowerCase();
   let modifier = 'pill-neutral';
 
-  if (normalized === 'success' || normalized === 'in_stock') {
+  if (normalized === 'success' || normalized === 'in_stock' || normalized === 'tracking') {
     modifier = 'pill-success';
   } else if (normalized === 'retried' || normalized === 'low_stock') {
     modifier = 'pill-retried';

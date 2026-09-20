@@ -9,12 +9,35 @@ import { validateScrapedProduct, ValidationError } from './validator.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// In-memory catalog cache with 10-minute TTL for search queries
-let catalogCache = {
+const FULL_TTL_MS = 30 * 60 * 1000; // 30 minutes full TTL
+const PARTIAL_TTL_MS = 60 * 1000;   // 1 minute degraded TTL for partial results
+
+// In-memory catalog cache with concurrency management, full vs partial TTL, and stats tracking
+export const catalogCache = {
   items: [],
   cachedAt: 0,
-  ttlMs: 10 * 60 * 1000 // 10 minutes
+  ttlMs: FULL_TTL_MS,
+  isPartial: false,
+  message: null,
+  pageSize: 50,
+  pageCount: 0,
+  storeTotal: 0,
+  fetchInProgress: null
 };
+
+export function getCatalogStats() {
+  return {
+    itemCount: catalogCache.items.length,
+    pageSize: catalogCache.pageSize,
+    pageCount: catalogCache.pageCount,
+    storeTotal: catalogCache.storeTotal,
+    has459: catalogCache.items.some((it) => String(it.id) === '459'),
+    isPartial: catalogCache.isPartial,
+    ttlMs: catalogCache.ttlMs,
+    cachedAt: catalogCache.cachedAt,
+    message: catalogCache.message
+  };
+}
 
 /**
  * Classifies an error into one of the designated core error types:
@@ -273,57 +296,199 @@ export async function scrapeProduct(product, options = {}) {
 }
 
 /**
- * Searches the mock store by fetching catalog pages via plain HTTP (no challenge required),
- * caching entries in memory with a short TTL, and filtering server-side by query.
+ * Refreshes the catalog cache by fetching ALL pages with controlled concurrency (~4),
+ * retries on 429/failures with backoff, and deterministic sorting by ID.
+ * If any page fails after retries, marks cache partial with degraded 60s TTL.
  * 
- * @param {string} query - Search term (minimum 2 characters)
- * @returns {Promise<Array<Object>>} Normalized products
+ * @param {boolean} [force=false]
+ * @returns {Promise<typeof catalogCache>}
  */
-export async function searchProducts(query) {
+export async function refreshCatalogCache(force = false) {
+  const now = Date.now();
+  if (
+    !force &&
+    catalogCache.items.length > 0 &&
+    now - catalogCache.cachedAt < catalogCache.ttlMs
+  ) {
+    return catalogCache;
+  }
+
+  // Deduplicate concurrent refresh calls
+  if (catalogCache.fetchInProgress) {
+    return catalogCache.fetchInProgress;
+  }
+
+  catalogCache.fetchInProgress = (async () => {
+    try {
+      const pageSize = 50;
+      // 1. Fetch initial page to discover store total and total pages
+      let firstData = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetch(`${config.storeBaseUrl}/api/catalog?page=1&pageSize=${pageSize}`);
+          if (res.status === 429) {
+            const wait = Math.max(parseInt(res.headers.get('retry-after') || '1', 10) * 1000, 400 * attempt);
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+          }
+          if (res.ok) {
+            firstData = await res.json();
+            break;
+          }
+        } catch (e) {
+          if (attempt === 3) throw e;
+          await new Promise((r) => setTimeout(r, 250 * attempt));
+        }
+      }
+
+      if (!firstData || !Array.isArray(firstData.items)) {
+        throw new Error('Failed to retrieve initial catalog page');
+      }
+
+      const storeTotal = firstData.total || 1000;
+      const actualPageSize = firstData.pageSize || pageSize;
+      const totalPages = firstData.pages || Math.ceil(storeTotal / actualPageSize);
+
+      catalogCache.storeTotal = storeTotal;
+      catalogCache.pageSize = actualPageSize;
+      catalogCache.pageCount = totalPages;
+
+      const itemsMap = new Map();
+      for (const it of firstData.items) {
+        if (it && it.id != null) itemsMap.set(String(it.id), it);
+      }
+
+      // 2. Fetch remaining pages (2..totalPages) with limited concurrency (~4)
+      const remainingPages = [];
+      for (let p = 2; p <= totalPages; p++) {
+        remainingPages.push(p);
+      }
+
+      let anyPageFailed = false;
+      const failedPages = [];
+
+      async function fetchPageWithRetry(page, maxRetries = 3) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const res = await fetch(`${config.storeBaseUrl}/api/catalog?page=${page}&pageSize=${actualPageSize}`);
+            if (res.status === 429) {
+              const retrySec = parseInt(res.headers.get('retry-after') || '1', 10);
+              const waitMs = Math.max(retrySec * 1000, 400 * attempt);
+              await new Promise((r) => setTimeout(r, waitMs));
+              continue;
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (Array.isArray(data.items)) {
+              return data.items;
+            }
+            throw new Error('Missing items array');
+          } catch (err) {
+            if (attempt === maxRetries) {
+              failedPages.push(page);
+              anyPageFailed = true;
+              return [];
+            }
+            await new Promise((r) => setTimeout(r, 200 * attempt));
+          }
+        }
+        return [];
+      }
+
+      const CONCURRENCY = 4;
+      async function worker() {
+        while (remainingPages.length > 0) {
+          const page = remainingPages.shift();
+          const items = await fetchPageWithRetry(page);
+          for (const it of items) {
+            if (it && it.id != null) {
+              itemsMap.set(String(it.id), it);
+            }
+          }
+          await new Promise((r) => setTimeout(r, 50));
+        }
+      }
+
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+
+      // 3. Sort catalog items deterministically by numeric ID
+      const allItems = Array.from(itemsMap.values());
+      allItems.sort((a, b) => Number(a.id) - Number(b.id));
+
+      catalogCache.items = allItems;
+      catalogCache.cachedAt = Date.now();
+
+      if (anyPageFailed) {
+        catalogCache.isPartial = true;
+        catalogCache.ttlMs = PARTIAL_TTL_MS;
+        catalogCache.message = `Partial catalog cached (${allItems.length} items); pages failed: ${failedPages.join(', ')}. Degraded TTL: ${PARTIAL_TTL_MS / 1000}s.`;
+        console.warn(`[StoreClient] ${catalogCache.message}`);
+      } else {
+        catalogCache.isPartial = false;
+        catalogCache.ttlMs = FULL_TTL_MS;
+        catalogCache.message = null;
+        console.log(`[StoreClient] Full catalog cached: ${allItems.length} unique items across ${totalPages} pages. Full TTL: ${FULL_TTL_MS / 60000}m.`);
+      }
+
+      return catalogCache;
+    } catch (err) {
+      console.error('[StoreClient] Full catalog fetch error:', err.message);
+      catalogCache.isPartial = true;
+      catalogCache.ttlMs = PARTIAL_TTL_MS;
+      catalogCache.message = `Catalog fetch failed: ${err.message}. Short TTL applied.`;
+      return catalogCache;
+    } finally {
+      catalogCache.fetchInProgress = null;
+    }
+  })();
+
+  return catalogCache.fetchInProgress;
+}
+
+/**
+ * Searches the catalog with:
+ * - Multi-word case-insensitive matching: all words must appear in name + brand + sku (or query matches ID)
+ * - Deterministic ordering: exact name match first (case-insensitive), then alphabetical by name, then by ID
+ * 
+ * @param {string} query - Search term
+ * @param {Object} [options]
+ * @param {boolean} [options.forceRefresh=false]
+ * @returns {Promise<Array<Object>>}
+ */
+export async function searchProducts(query, options = {}) {
   if (!query || typeof query !== 'string' || query.trim().length < 2) {
     return [];
   }
 
   const normalizedQuery = query.trim().toLowerCase();
-  const now = Date.now();
+  const queryWords = normalizedQuery.split(/\s+/).filter(Boolean);
 
-  // Populate or refresh catalog cache if expired
-  if (catalogCache.items.length === 0 || now - catalogCache.cachedAt > catalogCache.ttlMs) {
-    try {
-      const fetchedItems = [];
-      // Fetch the first 5 pages (100 products) to provide a rich catalog search
-      for (let page = 1; page <= 5; page++) {
-        const res = await fetch(`${config.storeBaseUrl}/api/catalog?page=${page}&pageSize=20`);
-        if (!res.ok) break;
-        const data = await res.json();
-        if (data.items && Array.isArray(data.items)) {
-          fetchedItems.push(...data.items);
-        } else {
-          break;
-        }
-      }
+  await refreshCatalogCache(options.forceRefresh || false);
 
-      if (fetchedItems.length > 0) {
-        catalogCache.items = fetchedItems;
-        catalogCache.cachedAt = now;
-      }
-    } catch (e) {
-      console.error('[Search Error] Failed to refresh catalog cache:', e.message);
-      // If network fails but we have stale cache, continue using stale cache
-    }
-  }
-
-  // Filter cached catalog items server-side
+  // Multi-word case-insensitive filter: every word must appear in name + brand + sku (or exact ID match)
   const matches = catalogCache.items.filter((item) => {
-    const nameMatch = (item.name || '').toLowerCase().includes(normalizedQuery);
-    const catMatch = (item.category || '').toLowerCase().includes(normalizedQuery);
-    const brandMatch = (item.brand || '').toLowerCase().includes(normalizedQuery);
-    const skuMatch = (item.sku || '').toLowerCase().includes(normalizedQuery);
-    return nameMatch || catMatch || brandMatch || skuMatch;
+    const haystack = `${item.name || ''} ${item.brand || ''} ${item.sku || ''}`.toLowerCase();
+    const wordsMatch = queryWords.every((w) => haystack.includes(w));
+    const idMatch = String(item.id) === query.trim();
+    return wordsMatch || idMatch;
   });
 
-  // Normalize product objects
+  // Deterministic sort:
+  // 1. Exact name match first (case-insensitive)
+  // 2. Then alphabetical by name
+  // 3. Then by numeric id
+  matches.sort((a, b) => {
+    const aExact = (a.name || '').toLowerCase() === normalizedQuery ? 0 : 1;
+    const bExact = (b.name || '').toLowerCase() === normalizedQuery ? 0 : 1;
+    if (aExact !== bExact) return aExact - bExact;
+    const nameCmp = (a.name || '').localeCompare(b.name || '');
+    if (nameCmp !== 0) return nameCmp;
+    return Number(a.id) - Number(b.id);
+  });
+
+  // Normalize product objects with store_product_id
   return matches.map((item) => ({
+    id: String(item.id),
     store_product_id: String(item.id),
     name: item.name,
     url: `${config.storeBaseUrl}/product/${item.id}`,
@@ -331,6 +496,8 @@ export async function searchProducts(query) {
     category: item.category || null,
     brand: item.brand || null,
     sku: item.sku || null,
-    description: item.description || null
+    description: item.description || null,
+    price: item.price != null && item.price > 0 ? item.price : null,
+    mrp: item.mrp != null && item.mrp > 0 ? item.mrp : null
   }));
 }

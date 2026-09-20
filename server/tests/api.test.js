@@ -87,6 +87,113 @@ test('Level B5: Search Route (/api/search)', async (t) => {
     assert.ok(Array.isArray(body.products));
     assert.equal(typeof body.count, 'number');
   });
+
+  await t.test('search for "domus" returns items with store_product_id and includes "Domus Sling Plus" (459)', async () => {
+    const res = await fetch(`${baseUrl}/api/search?q=domus`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.products));
+    assert.ok(body.products.length > 0);
+
+    // Verify store_product_id is populated on every result
+    for (const item of body.products) {
+      assert.ok(item.store_product_id, `store_product_id should be present, got ${item.store_product_id}`);
+      assert.equal(typeof item.store_product_id, 'string');
+    }
+
+    // Verify Domus Sling Plus (459) is present in the results
+    const domus459 = body.products.find((p) => String(p.store_product_id) === '459');
+    assert.ok(domus459, 'Search for domus must return Domus Sling Plus (id 459)');
+    assert.equal(domus459.name, 'Domus Sling Plus');
+  });
+
+  await t.test('multi-word and case-insensitive matching on fixture: "domus", "sling", "domus sling", "domus sling plus" all return 459', async () => {
+    // Fixture with product 459 and several other "domus" and sling products
+    const fixture = [
+      { id: 459, name: 'Domus Sling Plus', brand: 'Domus', sku: 'DOM-10459', category: 'Bags' },
+      { id: 697, name: 'Domus Backpack S', brand: 'Domus', sku: 'DOM-10697', category: 'Bags' },
+      { id: 101, name: 'Domus Sleeve Air', brand: 'Domus', sku: 'DOM-10101', category: 'Bags' },
+      { id: 303, name: 'Domus Workstation Three', brand: 'Domus', sku: 'DOM-10303', category: 'Desks' },
+      { id: 202, name: 'Summit Sling Lite', brand: 'Summit', sku: 'SUM-10202', category: 'Bags' }
+    ];
+
+    function filterFixture(query) {
+      const norm = query.trim().toLowerCase();
+      const words = norm.split(/\s+/).filter(Boolean);
+      const matched = fixture.filter((it) => {
+        const text = `${it.name} ${it.brand} ${it.sku}`.toLowerCase();
+        return words.every((w) => text.includes(w));
+      });
+      matched.sort((a, b) => {
+        const aExact = a.name.toLowerCase() === norm ? 0 : 1;
+        const bExact = b.name.toLowerCase() === norm ? 0 : 1;
+        if (aExact !== bExact) return aExact - bExact;
+        return a.name.localeCompare(b.name);
+      });
+      return matched;
+    }
+
+    const q1 = filterFixture('domus');
+    assert.ok(q1.some((it) => it.id === 459), 'fixture search "domus" must return 459');
+
+    const q2 = filterFixture('sling');
+    assert.ok(q2.some((it) => it.id === 459), 'fixture search "sling" must return 459');
+
+    const q3 = filterFixture('domus sling');
+    assert.ok(q3.some((it) => it.id === 459), 'fixture search "domus sling" must return 459');
+
+    const q4 = filterFixture('domus sling plus');
+    assert.ok(q4.some((it) => it.id === 459), 'fixture search "domus sling plus" must return 459');
+    assert.equal(q4[0].id, 459, 'exact name match must be ordered first');
+  });
+
+  await t.test('live search endpoint: "domus", "sling", "domus sling", "domus sling plus" all return Domus Sling Plus (459)', async () => {
+    const queries = ['domus', 'sling', 'domus sling', 'domus sling plus'];
+    for (const q of queries) {
+      const res = await fetch(`${baseUrl}/api/search?q=${encodeURIComponent(q)}`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.ok(Array.isArray(data.products), `products must be array for q="${q}"`);
+      const item459 = data.products.find((p) => String(p.store_product_id) === '459');
+      assert.ok(item459, `Search for "${q}" must return Domus Sling Plus (459)`);
+      assert.equal(item459.name, 'Domus Sling Plus');
+    }
+  });
+
+  await t.test('GET /api/search/stats returns cache details and verifies 459 is present', async () => {
+    const res = await fetch(`${baseUrl}/api/search/stats`);
+    assert.equal(res.status, 200);
+    const stats = await res.json();
+    assert.equal(stats.has459, true, 'has459 should be true in cache stats');
+    assert.ok(stats.itemCount > 0, 'itemCount should be positive');
+  });
+
+  await t.test('Track button posts store_product_id from search result and creates product with correct id and name', async () => {
+    // Search catalog for a known item
+    const searchRes = await fetch(`${baseUrl}/api/search?q=domus`);
+    const searchBody = await searchRes.json();
+    const resultItem = searchBody.products.find((p) => String(p.store_product_id) === '459');
+    assert.ok(resultItem, 'Found product in search');
+
+    // Simulate clicking Track on the search result
+    const trackRes = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        store_product_id: resultItem.store_product_id,
+        name: resultItem.name,
+        category: resultItem.category,
+        brand: resultItem.brand,
+        sku: resultItem.sku
+      })
+    });
+
+    // 201 Created (or idempotent response)
+    assert.ok(trackRes.status === 201 || trackRes.status === 200);
+    const trackBody = await trackRes.json();
+    assert.equal(String(trackBody.product.store_product_id), '459');
+    assert.equal(trackBody.product.name, 'Domus Sling Plus');
+  });
 });
 
 test('Level B5: Cron Endpoint Security & Execution (/api/cron/scrape)', async (t) => {

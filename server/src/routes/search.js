@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { searchProducts } from '../services/storeClient.js';
+import { searchProducts, getCatalogStats } from '../services/storeClient.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 
@@ -13,6 +13,15 @@ const searchLimiter = createRateLimiter({
 });
 
 router.use(searchLimiter);
+
+/**
+ * GET /api/search/stats
+ * Returns catalog cache statistics (size, page count, store total, has459, etc.)
+ */
+router.get('/stats', asyncHandler(async (req, res) => {
+  const stats = getCatalogStats();
+  return res.status(200).json(stats);
+}));
 
 /**
  * GET /api/search?q=
@@ -33,10 +42,13 @@ router.get('/', asyncHandler(async (req, res, next) => {
     }
 
     const products = await searchProducts(q.trim());
+    const stats = getCatalogStats();
 
     return res.status(200).json({
       query: q.trim(),
       count: products.length,
+      isPartial: Boolean(stats.isPartial),
+      ...(stats.message ? { message: stats.message } : {}),
       products
     });
   } catch (err) {
