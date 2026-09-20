@@ -123,3 +123,20 @@ This document tracks all initial mistakes, incorrect assumptions, selector misid
   3. Created `asyncHandler` middleware wrapping all async route handlers to guarantee that all synchronous and asynchronous errors are forwarded to Express's central error handler returning JSON errors, never crashing the Node process.
   4. Added `process.on('unhandledRejection')` and `process.on('uncaughtException')` listeners logging loudly with the active `run_id`.
   5. Added Express integration tests covering `POST /api/cron/scrape` (valid secret, invalid secret, queue full) and `POST /api/products/:id/scrape` in `server/tests/api.test.js`.
+
+### Entry 23: Exposing Admin Cron Secret in Client-Side Source and Compiled Bundle
+- **What went wrong**: In Levels F1–F3, `client/src/api/client.js` included default fallback secret parameters (`cronSecret = 'test-cron-secret-12345'`) and attached the privileged `x-cron-secret` header to scrape calls. Vite bundled this string directly into the public production JavaScript bundle (`client/dist/assets/index-*.js`).
+- **How it was detected**: User inspected client files with `Select-String -Pattern 'cron.?secret'` and found matches in `client/src/api/client.js` and the compiled client bundle.
+- **How it was fixed**:
+  1. Removed all references to `cronSecret` and `x-cron-secret` from `client/`.
+  2. Removed the privileged "Trigger Cron Scrape" button from `Navbar.jsx`.
+  3. Replaced privileged scraping with a public endpoint `POST /api/products/:id/refresh` that requires no secret, enqueues one scrape, and enforces a 5-minute per-product cooldown (HTTP 429 with remaining seconds and `Retry-After`), rate limiting, and queue capacity caps.
+  4. Added `client/dist/` to `.gitignore`, deleted and rebuilt `client/dist/`, and verified with `git grep --untracked -n -i cron.secret -- client` that zero matches exist and no `VITE_` variable holds secrets.
+
+### Entry 24: Unvalidated Product Tracking Allowed Arbitrary Non-Numeric Junk IDs ("basket")
+- **What went wrong**: `POST /api/products` accepted any string as `store_product_id` without verifying that it was numeric or existed in the store catalog. When an arbitrary search string ("basket") was submitted, `resolveProductMetadata` synthesized a fallback product (`name: 'Product basket'`) and inserted it into Supabase. All subsequent scrape attempts for `/product/basket` failed (`waitForSelector 6000ms exceeded`).
+- **How it was detected**: User searched "basket" in the UI and discovered a junk product with `store_product_id: 'basket'` in the database that consistently timed out and failed.
+- **How it was fixed**:
+  1. Backend: Updated `POST /api/products` to strictly validate that `store_product_id` is numeric (`/^\d+$/`) and verified against the store catalog/metadata API before saving. Rejects invalid IDs with HTTP 400 (`INVALID_PRODUCT_ID` or `PRODUCT_NOT_FOUND`) with clear errors, ensuring tracking failures never leave half-created products.
+  2. Frontend: Enforced digits-only entry in `ManualTrackForm.jsx` (`inputMode="numeric"`, regex digit sanitization) and surfaced backend validation errors directly below the input box. Confirmed `CatalogSearch.jsx` does not offer tracking when searches return no matches.
+  3. Tests: Added automated tests verifying that POSTing "basket" directly to `/api/products` returns 400 and creates no product record.

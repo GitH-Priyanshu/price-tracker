@@ -10,6 +10,7 @@ import config from '../src/config/index.js';
 import { createRateLimiter } from '../src/middleware/rateLimiter.js';
 import { getSupabaseClient } from '../src/db/client.js';
 import scrapeQueue, { QueueFullError } from '../src/services/scrapeQueue.js';
+import { clearRefreshCooldowns } from '../src/routes/products.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +138,47 @@ test('Level B5: Products API Routes (/api/products)', async (t) => {
     assert.equal(res.status, 400);
     const body = await res.json();
     assert.equal(body.error?.code, 'INVALID_INPUT');
+  });
+
+  await t.test('POST /api/products rejects non-numeric store_product_id ("basket") with 400 INVALID_PRODUCT_ID', async () => {
+    const res = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: 'basket' })
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error?.code, 'INVALID_PRODUCT_ID');
+    assert.match(body.error?.message, /must be numeric/i);
+  });
+
+  await t.test('POST /api/products rejects URL with non-numeric product ID with 400', async () => {
+    const res = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://demo.inelabteamdev.com/product/basket' })
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error?.code, 'INVALID_PRODUCT_ID');
+  });
+
+  await t.test('POST /api/products rejects non-existent product ID with 400 PRODUCT_NOT_FOUND without leaving half-created product', async () => {
+    const junkId = '99999999';
+    const res = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: junkId })
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error?.code, 'PRODUCT_NOT_FOUND');
+    assert.match(body.error?.message, /does not exist in store catalog/i);
+
+    // Verify no half-created product record exists in Supabase
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.from('products').select('*').eq('store_product_id', junkId);
+    assert.equal((data || []).length, 0);
   });
 
   await t.test('GET /api/products/:id returns 404 NOT_FOUND for non-existent id', async () => {
@@ -544,6 +586,87 @@ test('Level B7: Protected Scrape Routes & Queue Integration', async (t) => {
       assert.equal(body.error.code, 'QUEUE_FULL');
     } finally {
       scrapeQueue.queue = originalQueue;
+    }
+  });
+
+  await t.test('POST /api/products/:id/refresh is PUBLIC and enqueues without secret', async () => {
+    clearRefreshCooldowns();
+    const trackRes = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: 'test-refresh-pub-prod', name: 'Refresh Pub Test' })
+    });
+    assert.equal(trackRes.status, 201);
+    const trackBody = await trackRes.json();
+    const productId = trackBody.product.id;
+
+    // Call WITHOUT any secret or x-cron-secret header
+    const refreshRes = await fetch(`${baseUrl}/api/products/${productId}/refresh`, {
+      method: 'POST'
+    });
+    assert.equal(refreshRes.status, 202);
+    const refreshBody = await refreshRes.json();
+    assert.equal(refreshBody.status, 'accepted');
+    assert.ok(refreshBody.run_id);
+    clearRefreshCooldowns();
+  });
+
+  await t.test('POST /api/products/:id/refresh enforces 5-minute cooldown and returns 429', async () => {
+    const trackRes = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: 'test-cooldown-prod', name: 'Cooldown Test' })
+    });
+    assert.equal(trackRes.status, 201);
+    const trackBody = await trackRes.json();
+    const productId = trackBody.product.id;
+
+    clearRefreshCooldowns();
+    // First refresh succeeds
+    const firstRes = await fetch(`${baseUrl}/api/products/${productId}/refresh`, { method: 'POST' });
+    assert.equal(firstRes.status, 202);
+
+    // Second immediate refresh rejected by 5-minute cooldown
+    const secondRes = await fetch(`${baseUrl}/api/products/${productId}/refresh`, { method: 'POST' });
+    assert.equal(secondRes.status, 429);
+    assert.ok(secondRes.headers.get('Retry-After'));
+    const body = await secondRes.json();
+    assert.equal(body.error?.code, 'COOLDOWN_ACTIVE');
+    assert.ok(body.error?.retry_after_seconds > 0);
+    clearRefreshCooldowns();
+  });
+
+  await t.test('POST /api/products/:id/refresh returns 429 when queue is full', async () => {
+    const trackRes = await fetch(`${baseUrl}/api/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_product_id: 'test-refresh-queue-full-prod', name: 'Refresh Q Full Test' })
+    });
+    assert.equal(trackRes.status, 201);
+    const trackBody = await trackRes.json();
+    const productId = trackBody.product.id;
+
+    clearRefreshCooldowns();
+    const originalQueue = [...scrapeQueue.queue];
+    while (scrapeQueue.queue.length < scrapeQueue.maxSize) {
+      scrapeQueue.queue.push({
+        id: 'mock-filler-' + Math.random(),
+        type: 'product',
+        fn: async () => {},
+        resolve: () => {},
+        reject: () => {}
+      });
+    }
+
+    try {
+      const res = await fetch(`${baseUrl}/api/products/${productId}/refresh`, { method: 'POST' });
+      assert.equal(res.status, 429);
+      const body = await res.json();
+      assert.equal(body.status, 'skipped');
+      assert.equal(body.error?.code, 'QUEUE_FULL');
+    } finally {
+      scrapeQueue.queue = originalQueue;
+      clearRefreshCooldowns();
     }
   });
 });

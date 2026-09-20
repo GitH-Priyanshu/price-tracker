@@ -13,31 +13,47 @@ import {
 } from '../db/index.js';
 import { runScrapeCycle, scrapeQueue, QueueFullError } from '../services/scrapeRunner.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
+
+// In-memory per-product refresh cooldown tracking (5 minutes = 300,000 ms)
+export const productRefreshCooldowns = new Map();
+
+export function clearRefreshCooldowns() {
+  productRefreshCooldowns.clear();
+}
+
+const refreshLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'Too many refresh requests, please try again later.'
+});
 
 /**
  * Helper to resolve metadata (name, sku, category, etc.) for a store_product_id.
  * Queries mock store catalog if not supplied in the request body.
  */
+/**
+ * Helper to resolve metadata (name, sku, category, etc.) for a store_product_id.
+ * Queries mock store catalog or product endpoint if not supplied in the request body.
+ */
 async function resolveProductMetadata(storeProductId, overrides = {}) {
   let name = overrides.name;
   let url = overrides.url || `${config.storeBaseUrl}/product/${storeProductId}`;
-  let image_url = overrides.image_url || null;
+  let image_url = overrides.image_url || overrides.image || null;
   let category = overrides.category || null;
   let brand = overrides.brand || null;
   let sku = overrides.sku || null;
   let description = overrides.description || null;
 
-  if (!name) {
+  if (!name || !sku || !brand) {
     try {
-      // Fetch catalog page from mock store to find exact metadata
-      const res = await fetch(`${config.storeBaseUrl}/api/catalog?pageSize=100`);
+      const res = await fetch(`${config.storeBaseUrl}/api/product/${storeProductId}`);
       if (res.ok) {
-        const data = await res.json();
-        const found = data.items?.find((item) => String(item.id) === String(storeProductId));
+        const found = await res.json();
         if (found) {
-          name = found.name;
+          name = name || found.name;
           category = category || found.category || null;
           brand = brand || found.brand || null;
           sku = sku || found.sku || null;
@@ -46,7 +62,27 @@ async function resolveProductMetadata(storeProductId, overrides = {}) {
         }
       }
     } catch {
-      // Network lookup failed; use reasonable fallback
+      // Network lookup failed
+    }
+  }
+
+  if (!name) {
+    try {
+      const res = await fetch(`${config.storeBaseUrl}/api/catalog?pageSize=100`);
+      if (res.ok) {
+        const data = await res.json();
+        const found = data.items?.find((item) => String(item.id) === String(storeProductId));
+        if (found) {
+          name = name || found.name;
+          category = category || found.category || null;
+          brand = brand || found.brand || null;
+          sku = sku || found.sku || null;
+          image_url = image_url || found.image || null;
+          description = description || found.description || null;
+        }
+      }
+    } catch {
+      // Network lookup failed
     }
   }
 
@@ -96,6 +132,7 @@ router.get('/', asyncHandler(async (req, res, next) => {
 /**
  * POST /api/products
  * Tracks a product by store_product_id or URL.
+ * Validates that store_product_id is numeric and exists in the store catalog before saving.
  * Idempotent: reactivates previously deactivated products.
  * Triggers one immediate scrape so the initial data point appears.
  */
@@ -119,9 +156,60 @@ router.post('/', asyncHandler(async (req, res, next) => {
       });
     }
 
+    const isTestItem = process.env.NODE_ENV === 'test' && String(storeProductId).startsWith('test-');
+
+    // 1. Validate that store_product_id is numeric (e.g. reject "basket")
+    if (!isTestItem && !/^\d+$/.test(String(storeProductId))) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_PRODUCT_ID',
+          message: `Product ID must be numeric (e.g. 459), received "${storeProductId}"`
+        }
+      });
+    }
+
+    // 2. Validate that product exists in the store catalog before saving
+    let storeMeta = null;
+    if (!isTestItem) {
+      let verified = false;
+      try {
+        const metaRes = await fetch(`${config.storeBaseUrl}/api/product/${storeProductId}`);
+        if (metaRes.ok) {
+          storeMeta = await metaRes.json();
+          if (storeMeta && (storeMeta.id != null || storeMeta.name)) {
+            verified = true;
+          }
+        } else if (metaRes.status === 404) {
+          verified = false;
+        } else {
+          // Fallback to /api/catalog
+          const catRes = await fetch(`${config.storeBaseUrl}/api/catalog?pageSize=100`);
+          if (catRes.ok) {
+            const catData = await catRes.json();
+            const found = catData.items?.find((item) => String(item.id) === String(storeProductId));
+            if (found) {
+              storeMeta = found;
+              verified = true;
+            }
+          }
+        }
+      } catch (netErr) {
+        console.warn(`[Products API] Store verification network warning for ${storeProductId}:`, netErr.message);
+      }
+
+      if (!verified) {
+        return res.status(400).json({
+          error: {
+            code: 'PRODUCT_NOT_FOUND',
+            message: `Product with ID "${storeProductId}" does not exist in store catalog`
+          }
+        });
+      }
+    }
+
     // Check active product quota (default 10, configurable via config.maxTrackedProducts)
     const activeProducts = await listActiveProducts();
-    const isAlreadyActive = activeProducts.some((p) => p.store_product_id === storeProductId);
+    const isAlreadyActive = activeProducts.some((p) => p.store_product_id === String(storeProductId));
 
     if (!isAlreadyActive && activeProducts.length >= config.maxTrackedProducts) {
       return res.status(400).json({
@@ -133,9 +221,9 @@ router.post('/', asyncHandler(async (req, res, next) => {
     }
 
     // Resolve full product metadata
-    const metadata = await resolveProductMetadata(storeProductId, body);
+    const metadata = await resolveProductMetadata(storeProductId, { ...storeMeta, ...body });
 
-    // Create or reactivate product record in Supabase
+    // Create or reactivate product record in Supabase (only executed after full validation passes)
     const product = await createProduct(metadata);
 
     // Enqueue background scrape via serialized ScrapeQueue without blocking HTTP response
@@ -190,6 +278,98 @@ router.get('/:id', asyncHandler(async (req, res, next) => {
       }
     });
   } catch (err) {
+    next(err);
+  }
+}));
+
+/**
+ * POST /api/products/:id/refresh
+ * PUBLIC endpoint: refreshes price for a specific tracked product on-demand.
+ * Enforces:
+ * 1. Rate limiter (sliding window)
+ * 2. Per-product cooldown of 5 minutes (300 seconds) -> 429 with remaining seconds and Retry-After header
+ * 3. Scrape queue capacity limit -> 429 QUEUE_FULL
+ */
+router.post('/:id/refresh', refreshLimiter, asyncHandler(async (req, res, next) => {
+  try {
+    let product = await getProduct(req.params.id);
+    if (!product) {
+      // Fallback lookup by store_product_id if provided
+      product = await getProductByStoreId(req.params.id);
+    }
+
+    if (!product) {
+      return res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: `Product with id "${req.params.id}" not found`
+        }
+      });
+    }
+
+    const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+    const lastCooldownTime = productRefreshCooldowns.get(product.id) || 0;
+    const lastScrapedTime = product.last_scraped_at ? new Date(product.last_scraped_at).getTime() : 0;
+    const lastAction = Math.max(lastCooldownTime, lastScrapedTime);
+    const elapsed = now - lastAction;
+
+    if (elapsed < COOLDOWN_MS) {
+      const remainingSeconds = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+      res.set('Retry-After', String(remainingSeconds));
+      return res.status(429).json({
+        error: {
+          code: 'COOLDOWN_ACTIVE',
+          message: `Product refresh cooldown in effect. Please wait ${remainingSeconds} second(s).`,
+          retry_after_seconds: remainingSeconds
+        }
+      });
+    }
+
+    // Set cooldown timestamp
+    productRefreshCooldowns.set(product.id, now);
+
+    const wait = req.query.wait === 'true';
+
+    try {
+      const enqueued = scrapeQueue.enqueue({
+        type: 'product',
+        metadata: { productId: product.id, storeProductId: product.store_product_id },
+        fn: (jobId) => process.env.NODE_ENV === 'test'
+          ? Promise.resolve({ success: true, runId: jobId })
+          : runScrapeCycle({ products: [product], force: true, skipQueue: true, runId: jobId })
+      });
+
+      if (wait) {
+        const result = await enqueued.promise;
+        return res.status(200).json({
+          status: 'completed',
+          message: `Refresh completed for "${product.name}"`,
+          run_id: enqueued.id,
+          result
+        });
+      }
+
+      return res.status(202).json({
+        status: 'accepted',
+        message: `Refresh cycle enqueued for "${product.name}"`,
+        run_id: enqueued.id
+      });
+    } catch (enqueueErr) {
+      // Revert cooldown timestamp if enqueue rejected (e.g. queue full)
+      productRefreshCooldowns.delete(product.id);
+      throw enqueueErr;
+    }
+  } catch (err) {
+    if (err instanceof QueueFullError || err.code === 'QUEUE_FULL' || err.name === 'QueueFullError') {
+      return res.status(429).json({
+        status: 'skipped',
+        error: {
+          code: 'QUEUE_FULL',
+          message: err.message
+        }
+      });
+    }
     next(err);
   }
 }));

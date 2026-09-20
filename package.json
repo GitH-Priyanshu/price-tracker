@@ -11,6 +11,8 @@
     "server:dev": "npm --workspace=server run dev",
     "server:test": "npm --workspace=server test",
     "test": "npm --workspace=server test",
-    "scrape:watch": "node server/scripts/scrape-once.js"
+    "scrape:watch": "node server/scripts/scrape-once.js",
+    "client:dev": "npm --workspace=client run dev",
+    "client:build": "npm --workspace=client run build"
   }
 }
